@@ -20,6 +20,10 @@
   label { display: block; margin: .75rem 0 .25rem; font-weight: 600; font-size: .9rem; }
   input, select, textarea { width: 100%; padding: .5rem; box-sizing: border-box; font: inherit; border-radius: 6px; border: 1px solid #80808055; background: transparent; color: inherit; }
   textarea { min-height: 140px; resize: vertical; }
+  /* Native <option> popup ba'zi brauzerlarda sahifaning qorong'i mavzusini
+     to'liq meros qilib olmaydi (oq fon + ochiq rang matn = ko'rinmas bo'lib
+     qoladi) — shuning uchun variantlar rangini aniq belgilaymiz. */
+  option { color: #111; background-color: #fff; }
   button { margin-top: 1rem; padding: .6rem 1.4rem; font: inherit; cursor: pointer; border: none; border-radius: 6px; background: #2e7d32; color: white; }
   button:hover { background: #276b2a; }
   .error { background: #d32f2f22; border: 1px solid #d32f2f; padding: .75rem; border-radius: 6px; margin-bottom: 1rem; }
