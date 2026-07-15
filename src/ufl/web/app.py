@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ufl.clean.dedup import DeduplicationStore
@@ -49,12 +49,15 @@ def _dashboard_context() -> dict:
     with Store(_config.paths.db) as store:
         collected = store.collected_tokens_by_category()
         book_count = store.book_count()
+        books = store.list_books()
     budgets = compute_budget(_config.budget.categories, collected)
     return {
         "budgets": sorted(budgets, key=lambda b: b.category),
         "total": total_budget(budgets),
         "book_count": book_count,
         "categories": sorted(_config.budget.categories),
+        "category_labels": _config.budget.category_labels,
+        "books": sorted(books, key=lambda b: b.path),
     }
 
 
@@ -167,6 +170,20 @@ def _slug_from_url(url: str) -> str:
     raw = f"{parsed.netloc}{parsed.path}".strip("/") or "sahifa"
     slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", raw).strip("_")
     return slug or "sahifa"
+
+
+@app.post("/books/remove")
+def remove_book(path: str = Form(...)) -> RedirectResponse:
+    with Store(_config.paths.db) as store:
+        store.remove_book(path)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/books/clear-all")
+def clear_all_books() -> RedirectResponse:
+    with Store(_config.paths.db) as store:
+        store.clear_all()
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/download/{category}/{filename}")

@@ -40,7 +40,7 @@
         <input type="file" name="file" required>
         <label>Kategoriya</label>
         <select name="category">
-          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          {% for c in categories %}<option value="{{ c }}">{{ category_labels.get(c, c) }}</option>{% endfor %}
         </select>
         <button type="submit">Qayta ishlash</button>
       </form>
@@ -55,7 +55,7 @@
         <input type="text" name="filename" placeholder="avtomatik URL'dan olinadi">
         <label>Kategoriya</label>
         <select name="category">
-          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          {% for c in categories %}<option value="{{ c }}">{{ category_labels.get(c, c) }}</option>{% endfor %}
         </select>
         <button type="submit">Qayta ishlash</button>
       </form>
@@ -70,7 +70,7 @@
         <input type="text" name="filename" value="paste.txt">
         <label>Kategoriya</label>
         <select name="category">
-          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          {% for c in categories %}<option value="{{ c }}">{{ category_labels.get(c, c) }}</option>{% endfor %}
         </select>
         <button type="submit">Qayta ishlash</button>
       </form>
@@ -84,7 +84,7 @@
         <tr><th>Kategoriya</th><th>Yig'ilgan</th><th>Maqsad</th><th>Progress</th></tr>
         {% for b in budgets %}
         <tr>
-          <td>{{ b.category }}</td>
+          <td>{{ category_labels.get(b.category, b.category) }} <span style="color:#888;font-size:.8em">({{ b.category }})</span></td>
           <td>{{ "{:,}".format(b.collected_tokens) }}</td>
           <td>{{ "{:,}".format(b.target_tokens) }}</td>
           <td>
@@ -101,6 +101,37 @@
         </tr>
       </table>
       <p>Jami qayta ishlangan hujjat: <strong>{{ book_count }}</strong></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Qayta ishlangan hujjatlar (byudjetni boshqarish)</h2>
+    <div class="card">
+      {% if books %}
+      <table>
+        <tr><th>Fayl</th><th>Kategoriya</th><th>Token</th><th></th></tr>
+        {% for book in books %}
+        <tr>
+          <td style="word-break:break-all">{{ book.path }}</td>
+          <td>{{ category_labels.get(book.category, book.category) }}</td>
+          <td>{{ "{:,}".format(book.estimated_tokens) }}</td>
+          <td>
+            <form action="/books/remove" method="post" style="margin:0"
+                  onsubmit="return confirm('O\'chirilsinmi: {{ book.path }}?');">
+              <input type="hidden" name="path" value="{{ book.path }}">
+              <button type="submit" style="margin:0;padding:.3rem .7rem;background:#b71c1c;font-size:.85rem">O'chirish</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      <form action="/books/clear-all" method="post"
+            onsubmit="return confirm('Butun byudjet (barcha yozuvlar) tozalansinmi? Bu ortga qaytarilmaydi.');">
+        <button type="submit" style="background:#b71c1c">Hammasini tozalash</button>
+      </form>
+      {% else %}
+      <p style="color:#888">Hali hech narsa qayta ishlanmagan.</p>
+      {% endif %}
     </div>
   </section>
 </body>

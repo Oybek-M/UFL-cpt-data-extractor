@@ -22,6 +22,7 @@ class PathsConfig(BaseModel):
 
 class BudgetConfig(BaseModel):
     categories: dict[str, int]
+    category_labels: dict[str, str] = {}
 
 
 class TokenizerConfig(BaseModel):

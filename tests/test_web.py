@@ -21,6 +21,9 @@ db = "{(tmp_path / "ufl.db").as_posix()}"
 [budget.categories]
 books = 1000
 
+[budget.category_labels]
+books = "Kitoblar va adabiyot"
+
 [tokenizer]
 model_id = "bu-yerda-mavjud-bolmagan/model-id-xyz"
 local_dir = "{(tmp_path / "models" / "tokenizer").as_posix()}"
@@ -77,6 +80,40 @@ def test_index_shows_budget_dashboard(client):
     assert response.status_code == 200
     assert "books" in response.text
     assert "JAMI" in response.text
+
+
+def test_index_shows_human_readable_category_label(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Kitoblar va adabiyot" in response.text
+
+
+def test_books_remove_endpoint_removes_book_and_redirects_to_index(client):
+    client.post("/paste", data={"text": _UZBEK_TEXT, "category": "books", "filename": "sinov"})
+    assert "sinov.txt" in client.get("/").text
+
+    response = client.post(
+        "/books/remove", data={"path": [line for line in _find_book_paths(client) if "sinov" in line][0]}
+    )
+
+    assert response.status_code == 200  # TestClient follows the 303 redirect
+    assert "sinov.txt" not in response.text
+
+
+def test_books_clear_all_removes_every_record(client):
+    client.post("/paste", data={"text": _UZBEK_TEXT, "category": "books", "filename": "sinov"})
+
+    response = client.post("/books/clear-all")
+
+    assert response.status_code == 200
+    assert "Hali hech narsa qayta ishlanmagan" in response.text
+
+
+def _find_book_paths(client) -> list[str]:
+    import re
+
+    html = client.get("/").text
+    return re.findall(r'name="path" value="([^"]+)"', html)
 
 
 def test_paste_processes_uzbek_text_and_shows_result(client):

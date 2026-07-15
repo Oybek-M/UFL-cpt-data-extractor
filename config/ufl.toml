@@ -21,6 +21,16 @@ conversations = 120_000_000  # Conversations, interviews, subtitles (10%)
 technical     = 120_000_000  # Computing, technical docs & how-to (10%)
 domain_haf    =  60_000_000  # Health, agriculture, business & finance (5%)
 
+[budget.category_labels]
+web_news      = "Umumiy veb, yangiliklar, jurnallar"
+gov_legal     = "Davlat va huquqiy hujjatlar"
+education     = "Ta'lim va fan"
+reference     = "Vikipediya / ma'lumotnoma"
+books         = "Kitoblar va adabiyot"
+conversations = "Suhbatlar va subtitrlar"
+technical     = "Texnik / IT hujjatlar"
+domain_haf    = "Sog'liq, qishloq xo'jaligi, biznes"
+
 [tokenizer]
 # Gemma-4 tokenizer. .env dagi UFL_TOKENIZER_MODEL_ID bu qiymatni override qiladi.
 model_id = "google/gemma-4-4b-it"
