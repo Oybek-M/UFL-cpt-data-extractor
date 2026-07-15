@@ -2,7 +2,7 @@
 # Yangilash: versiyani shu yerda o'zgartirib, `docker compose build` qiling.
 
 # --- CLI / config / logging ---
-typer==0.12.5
+typer==0.26.8
 rich==13.8.1
 pydantic==2.9.2
 

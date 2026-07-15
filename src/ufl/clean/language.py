@@ -24,6 +24,20 @@ _UZBEK_STOPWORDS = {
 
 _WORD_RE = re.compile(r"[a-zA-Z']+")
 
+# O'zbek tili qo'shma (agglutinativ) til — bu qo'shimchalar deyarli har qanday
+# haqiqiy o'zbekcha jumlada uchraydi, mavzu/lug'atdan qat'i nazar. Shuning
+# uchun stopword'dan ko'ra ishonchliroq signal (uzun, boy lug'atli matnlarda
+# ham barqaror ishlaydi).
+_UZBEK_SUFFIXES = (
+    "ning", "lari", "lar", "dan", "gani", "ganda", "gan", "cha", "siz",
+    "lik", "chi", "moq", "ladi", "adi", "yotgan", "ayotgan", "ilgan",
+    "ulgan", "ish", "imiz", "ingiz",
+)
+
+
+def _has_uzbek_suffix(word: str) -> bool:
+    return any(len(word) > len(suffix) + 1 and word.endswith(suffix) for suffix in _UZBEK_SUFFIXES)
+
 
 @dataclass
 class LanguageResult:
@@ -34,13 +48,19 @@ class LanguageResult:
 
 
 def heuristic_score(text: str) -> float:
-    """0..1 — matn qanchalik o'zbekcha (lotin) ko'rinishga ega ekanini baholaydi."""
+    """0..1 — matn qanchalik o'zbekcha (lotin) ko'rinishga ega ekanini baholaydi.
+
+    Uch signal yig'indisi (so'z bir nechtasiga mos kelsa, bir nechta marta
+    hisoblanadi — bu haqiqiy o'zbekcha matnda tabiiy ravishda balni oshiradi):
+    stopword, o'/g' apostrofli harflar, va o'zbekcha grammatik qo'shimchalar.
+    """
     words = [w.lower() for w in _WORD_RE.findall(text)]
     if not words:
         return 0.0
-    stopword_ratio = sum(1 for w in words if w in _UZBEK_STOPWORDS) / len(words)
-    apostrophe_ratio = sum(1 for w in words if "o'" in w or "g'" in w) / len(words)
-    return min(stopword_ratio * 0.8 + apostrophe_ratio * 0.2, 1.0)
+    stopword_hits = sum(1 for w in words if w in _UZBEK_STOPWORDS)
+    apostrophe_hits = sum(1 for w in words if "o'" in w or "g'" in w)
+    suffix_hits = sum(1 for w in words if _has_uzbek_suffix(w))
+    return min((stopword_hits + apostrophe_hits + suffix_hits) / len(words), 1.0)
 
 
 def is_uzbek(
