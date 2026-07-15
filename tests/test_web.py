@@ -93,3 +93,34 @@ def test_download_serves_processed_txt(client):
     response = client.get("/download/books/sinov.txt")
     assert response.status_code == 200
     assert "kitob" in response.text.lower()
+
+
+def test_url_endpoint_fetches_and_processes_page(client, monkeypatch):
+    import ufl.web.app as web_app
+
+    fake_html = f"<html><body><article><p>{_UZBEK_TEXT}</p></article></body></html>"
+    monkeypatch.setattr(web_app.url_module, "fetch_html", lambda url: fake_html)
+
+    response = client.post(
+        "/url", data={"url": "https://misol.uz/maqola", "category": "books", "filename": ""}
+    )
+
+    assert response.status_code == 200
+    assert "kitob" in response.text.lower()
+
+
+def test_url_endpoint_shows_error_on_fetch_failure(client, monkeypatch):
+    import ufl.web.app as web_app
+    from ufl.ingest.url import UrlFetchError
+
+    def fail(url):
+        raise UrlFetchError("ichki manzilga ruxsat yo'q")
+
+    monkeypatch.setattr(web_app.url_module, "fetch_html", fail)
+
+    response = client.post(
+        "/url", data={"url": "http://127.0.0.1/", "category": "books", "filename": ""}
+    )
+
+    assert response.status_code == 200
+    assert "ichki manzilga ruxsat yo" in response.text

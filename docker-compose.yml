@@ -9,6 +9,7 @@ services:
       - ./config:/app/config
       - ./src:/app/src
       - ./tests:/app/tests
+      - ./scripts:/app/scripts
     environment:
       - UFL_TOKENIZER_MODEL_ID=${UFL_TOKENIZER_MODEL_ID:-}
       - HF_TOKEN=${HF_TOKEN:-}

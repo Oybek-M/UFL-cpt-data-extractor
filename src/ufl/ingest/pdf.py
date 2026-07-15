@@ -36,7 +36,7 @@ def extract(
             text = page.get_text().strip()
 
             if len(text) >= _MIN_TEXT_LAYER_CHARS:
-                blocks.extend(Block(text=p, page=page_number) for p in _split_paragraphs(text))
+                blocks.extend(_extract_page_blocks(page, page_number))
                 continue
 
             pix = page.get_pixmap(dpi=dpi)
@@ -48,6 +48,25 @@ def extract(
     finally:
         doc.close()
     return Document(blocks=blocks)
+
+
+def _extract_page_blocks(page: fitz.Page, page_number: int) -> list[Block]:
+    """PyMuPDF'ning vizual blok-rejimi (get_text('blocks')) orqali matnni chiqaradi.
+
+    Oddiy get_text() rejimi sahifa yuqori/pastidagi kolontitul/watermark'ni
+    (bo'sh qatordan boshqacha ajratilgan bo'lsa ham) tana matniga bitta '\n' bilan
+    yopishtirib yuboradi — bu keyingi bosqichda takrorlanuvchi header/footer'ni
+    aniqlab tashlashga xalaqit beradi. Blok-rejimi esa PDF layoutdagi haqiqiy
+    vizual bloklarni (sarlavha, footer, paragraf) alohida qaytaradi, shu orqali
+    clean/structure.py'dagi takrorlanish-asosidagi aniqlash to'g'ri ishlaydi.
+    """
+    blocks: list[Block] = []
+    for x0, y0, x1, y1, text, block_no, block_type in page.get_text("blocks"):
+        if block_type != 0:  # 0 = matn bloki; rasm va boshqalar o'tkazib yuboriladi
+            continue
+        for paragraph in _split_paragraphs(text):
+            blocks.append(Block(text=paragraph, page=page_number, y_position=y0))
+    return blocks
 
 
 def _split_paragraphs(text: str) -> list[str]:

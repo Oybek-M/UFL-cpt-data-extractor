@@ -11,6 +11,10 @@ from ufl.ingest.base import Block, Document
 
 def extract(path: Path) -> Document:
     html = path.read_text(encoding="utf-8", errors="replace")
+    return html_to_document(html)
+
+
+def html_to_document(html: str) -> Document:
     extracted = trafilatura.extract(
         html, output_format="txt", include_comments=False, include_tables=False
     )

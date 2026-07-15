@@ -6,9 +6,11 @@ Qoidalar: docs/superpowers/specs/2026-07-15-ufl-data-pipeline-design.md §18
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -17,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.config import Config
+from ufl.ingest import url as url_module
 from ufl.pipeline import ProcessResult, process_file, write_output
 from ufl.stats.budget import compute_budget, total_budget
 from ufl.stats.tokens import load_tokenizer_counter
@@ -134,6 +137,36 @@ async def paste(
                 "index.html", {"request": request, **_dashboard_context(), "error": str(exc)}
             )
     return templates.TemplateResponse(request, "result.html", {"result": result})
+
+
+@app.post("/url", response_class=HTMLResponse)
+async def from_url(
+    request: Request,
+    url: str = Form(...),
+    category: str = Form(...),
+    filename: str = Form(""),
+) -> HTMLResponse:
+    safe_name = filename.strip() or _slug_from_url(url)
+    if not safe_name.endswith(".html"):
+        safe_name = f"{safe_name}.html"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / safe_name
+        try:
+            html = url_module.fetch_html(url)
+            tmp_path.write_text(html, encoding="utf-8")
+            result = _process_and_record(tmp_path, category)
+        except Exception as exc:  # noqa: BLE001
+            return templates.TemplateResponse(
+                request, "index.html", {**_dashboard_context(), "error": str(exc)}
+            )
+    return templates.TemplateResponse(request, "result.html", {"result": result})
+
+
+def _slug_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    raw = f"{parsed.netloc}{parsed.path}".strip("/") or "sahifa"
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", raw).strip("_")
+    return slug or "sahifa"
 
 
 @app.get("/download/{category}/{filename}")

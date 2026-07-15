@@ -47,6 +47,21 @@
     </div>
 
     <div class="card">
+      <h2>URL'dan olish</h2>
+      <form action="/url" method="post">
+        <label>Veb-sahifa manzili</label>
+        <input type="url" name="url" required placeholder="https://misol.uz/maqola">
+        <label>Fayl nomi (ixtiyoriy)</label>
+        <input type="text" name="filename" placeholder="avtomatik URL'dan olinadi">
+        <label>Kategoriya</label>
+        <select name="category">
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+        <button type="submit">Qayta ishlash</button>
+      </form>
+    </div>
+
+    <div class="card">
       <h2>Matn joylashtirish (paste)</h2>
       <form action="/paste" method="post">
         <label>Matn</label>

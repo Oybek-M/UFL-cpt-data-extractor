@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 COPY tests/ ./tests/
+COPY scripts/ ./scripts/
 
 # Editable o'rnatish: docker-compose src/ ni volume qilib mount qiladi,
 # shunda kod o'zgarganda image qayta qurish shart emas.
