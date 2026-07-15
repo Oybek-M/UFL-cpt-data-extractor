@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UFL — Uzbek CPT Data</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { margin-bottom: .1rem; }
+  .sub { color: #888; margin-top: 0; }
+  section { margin-bottom: 2rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .card { border: 1px solid #80808055; border-radius: 10px; padding: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #80808033; font-size: .95rem; }
+  .bar { background: #80808033; border-radius: 4px; height: 8px; overflow: hidden; margin-bottom: .2rem; }
+  .bar-fill { background: #2e7d32; height: 100%; }
+  label { display: block; margin: .75rem 0 .25rem; font-weight: 600; font-size: .9rem; }
+  input, select, textarea { width: 100%; padding: .5rem; box-sizing: border-box; font: inherit; border-radius: 6px; border: 1px solid #80808055; background: transparent; color: inherit; }
+  textarea { min-height: 140px; resize: vertical; }
+  button { margin-top: 1rem; padding: .6rem 1.4rem; font: inherit; cursor: pointer; border: none; border-radius: 6px; background: #2e7d32; color: white; }
+  button:hover { background: #276b2a; }
+  .error { background: #d32f2f22; border: 1px solid #d32f2f; padding: .75rem; border-radius: 6px; margin-bottom: 1rem; }
+  .total-row { font-weight: bold; }
+</style>
+</head>
+<body>
+  <h1>UFL</h1>
+  <p class="sub">Uzbek CPT Data — kitob/hujjatlardan toza o'zbekcha matn ajratib olish</p>
+
+  {% if error %}<div class="error">Xato: {{ error }}</div>{% endif %}
+
+  <section class="grid">
+    <div class="card">
+      <h2>Fayl yuklash</h2>
+      <form action="/upload" method="post" enctype="multipart/form-data">
+        <label>Fayl (PDF, EPUB, DJVU, DOCX, FB2, TXT, HTML)</label>
+        <input type="file" name="file" required>
+        <label>Kategoriya</label>
+        <select name="category">
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+        <button type="submit">Qayta ishlash</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Matn joylashtirish (paste)</h2>
+      <form action="/paste" method="post">
+        <label>Matn</label>
+        <textarea name="text" required placeholder="Kitobdan yoki veb-saytdan copy-paste qiling..."></textarea>
+        <label>Fayl nomi</label>
+        <input type="text" name="filename" value="paste.txt">
+        <label>Kategoriya</label>
+        <select name="category">
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+        <button type="submit">Qayta ishlash</button>
+      </form>
+    </div>
+  </section>
+
+  <section>
+    <h2>Byudjet progressi (Uzbek CPT — 1.2B token)</h2>
+    <div class="card">
+      <table>
+        <tr><th>Kategoriya</th><th>Yig'ilgan</th><th>Maqsad</th><th>Progress</th></tr>
+        {% for b in budgets %}
+        <tr>
+          <td>{{ b.category }}</td>
+          <td>{{ "{:,}".format(b.collected_tokens) }}</td>
+          <td>{{ "{:,}".format(b.target_tokens) }}</td>
+          <td>
+            <div class="bar"><div class="bar-fill" style="width: {{ b.progress_pct }}%"></div></div>
+            {{ "%.1f"|format(b.progress_pct) }}%
+          </td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+          <td>JAMI</td>
+          <td>{{ "{:,}".format(total.collected_tokens) }}</td>
+          <td>{{ "{:,}".format(total.target_tokens) }}</td>
+          <td>{{ "%.2f"|format(total.progress_pct) }}%</td>
+        </tr>
+      </table>
+      <p>Jami qayta ishlangan hujjat: <strong>{{ book_count }}</strong></p>
+    </div>
+  </section>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Natija — UFL</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  .card { border: 1px solid #80808055; border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 0; }
+  dt { font-weight: 600; color: #888; }
+  dd { margin: 0; }
+  pre { white-space: pre-wrap; word-break: break-word; background: #80808018; padding: 1rem; border-radius: 8px; max-height: 420px; overflow-y: auto; }
+  a.button { display: inline-block; margin-top: 1rem; padding: .6rem 1.2rem; background: #2e7d32; color: white; text-decoration: none; border-radius: 6px; }
+  a.button:hover { background: #276b2a; }
+  a.back { display: inline-block; margin-top: 1rem; margin-left: 1rem; }
+</style>
+</head>
+<body>
+  <h1>Natija: {{ result.source_path.name }}</h1>
+  <div class="card">
+    <dl>
+      <dt>Format</dt><dd>{{ result.format }}</dd>
+      <dt>Kategoriya</dt><dd>{{ result.category }}</dd>
+      <dt>Jami blok</dt><dd>{{ result.total_blocks }}</dd>
+      <dt>Saqlangan blok</dt><dd>{{ result.kept_blocks }}</dd>
+      <dt>Tashlangan blok</dt><dd>{{ result.dropped|length }}</dd>
+      <dt>Belgi soni</dt><dd>{{ "{:,}".format(result.char_count) }}</dd>
+      <dt>Taxminiy token</dt><dd>{{ "{:,}".format(result.estimated_tokens) }}</dd>
+      <dt>Aniq token</dt><dd>{{ result.exact_tokens if result.exact_tokens is not none else "—" }}</dd>
+    </dl>
+    <a class="button" href="/download/{{ result.category }}/{{ result.source_path.stem }}.txt">.txt yuklab olish</a>
+    <a class="back" href="/">← Bosh sahifaga qaytish</a>
+  </div>
+  <h2>Toza matn (ko'rinish)</h2>
+  <pre>{{ result.kept_text }}</pre>
+</body>
+</html>

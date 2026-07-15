@@ -14,20 +14,15 @@ services:
       - HF_TOKEN=${HF_TOKEN:-}
     command: ["ufl", "version"]
 
-# Faza 3 (Web UI) qo'shilganda shu servis compose'ga qo'shiladi:
-#
-#  web:
-#    build: .
-#    image: ufl:latest
-#    working_dir: /app
-#    volumes:
-#      - ./data:/app/data
-#      - ./models:/app/models
-#      - ./config:/app/config
-#      - ./src:/app/src
-#    environment:
-#      - UFL_WEB_USERNAME=${UFL_WEB_USERNAME:-}
-#      - UFL_WEB_PASSWORD=${UFL_WEB_PASSWORD:-}
-#    ports:
-#      - "8000:8000"
-#    command: ["uvicorn", "ufl.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+  web:
+    build: .
+    image: ufl:latest
+    working_dir: /app
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./config:/app/config
+      - ./src:/app/src
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "ufl.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
