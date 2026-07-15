@@ -10,6 +10,7 @@ from rich.progress import track
 from rich.table import Table
 
 from ufl import __version__
+from ufl.cleanup import cleanup_logs
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.config import Config
@@ -206,6 +207,39 @@ def stats(
 
     console.print(table)
     console.print(f"Jami qayta ishlangan kitob/hujjat: [bold]{book_count}[/bold]")
+
+
+@app.command()
+def cleanup(
+    config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
+    older_than_days: int = typer.Option(
+        30, "--older-than-days", help="Shu kundan eski rejected/reports fayllari o'chiriladi"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Faqat qaysi fayllar o'chirilishini ko'rsatadi, o'chirmaydi"
+    ),
+) -> None:
+    """rejected/ va reports/ diagnostika loglarini tozalash (data/output/*.txt'ga tegilmaydi)."""
+    setup_logging()
+    config = Config.load(config_path)
+    result = cleanup_logs(
+        rejected_dir=config.paths.rejected,
+        reports_dir=config.paths.reports,
+        older_than_days=older_than_days,
+        dry_run=dry_run,
+    )
+    if dry_run:
+        for path in result.removed_files:
+            console.print(f"  {path}")
+        console.print(
+            f"[yellow]{len(result.removed_files)} ta fayl o'chirilishi mumkin[/yellow] "
+            f"({result.freed_bytes:,} bayt) — dry-run, hech narsa o'chirilmadi"
+        )
+    else:
+        console.print(
+            f"[green]{len(result.removed_files)} ta fayl o'chirildi[/green] "
+            f"({result.freed_bytes:,} bayt bo'shatildi)"
+        )
 
 
 if __name__ == "__main__":
