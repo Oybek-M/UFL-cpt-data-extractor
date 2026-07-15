@@ -106,8 +106,13 @@ def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "index.html", _dashboard_context())
 
 
+# /upload, /paste, /url qasddan "async def" emas, oddiy "def" — ular ichidagi
+# pipeline (OCR, transliteratsiya va h.k.) sinxron va CPU bilan band bo'lishi
+# mumkin. "async def" bo'lganda bu ish butun event loop'ni to'sib qo'yardi
+# (bitta og'ir fayl butun ilovani hamma uchun muzlatib qo'yardi); oddiy "def"
+# bilan FastAPI buni avtomatik alohida thread pool'da ishga tushiradi.
 @app.post("/upload", response_class=HTMLResponse)
-async def upload(request: Request, file: UploadFile = File(...), category: str = Form(...)) -> HTMLResponse:
+def upload(request: Request, file: UploadFile = File(...), category: str = Form(...)) -> HTMLResponse:
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir) / file.filename
         with tmp_path.open("wb") as f:
@@ -122,7 +127,7 @@ async def upload(request: Request, file: UploadFile = File(...), category: str =
 
 
 @app.post("/paste", response_class=HTMLResponse)
-async def paste(
+def paste(
     request: Request,
     text: str = Form(...),
     category: str = Form(...),
@@ -143,7 +148,7 @@ async def paste(
 
 
 @app.post("/url", response_class=HTMLResponse)
-async def from_url(
+def from_url(
     request: Request,
     url: str = Form(...),
     category: str = Form(...),
