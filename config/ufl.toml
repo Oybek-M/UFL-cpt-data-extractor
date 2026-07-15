@@ -1,0 +1,60 @@
+# UFL pipeline sozlamalari.
+# Bu fayl kod o'zgartirmasdan pipeline xulq-atvorini boshqaradi.
+
+[paths]
+input = "data/input"
+output = "data/output"
+rejected = "data/rejected"
+reports = "data/reports"
+models_dir = "models"
+
+# Uzbek CPT token byudjeti (maqsad).
+# Spec: docs/superpowers/specs/2026-07-15-ufl-data-pipeline-design.md §1
+[budget.categories]
+web_news      = 240_000_000  # Edited general web, news & magazines (20%)
+gov_legal     = 180_000_000  # Government, legal & public admin (15%)
+education     = 180_000_000  # Education, textbooks, science & academic (15%)
+reference     = 180_000_000  # Wikipedia & reference (15%)
+books         = 120_000_000  # Public-domain/licensed books & literature (10%)
+conversations = 120_000_000  # Conversations, interviews, subtitles (10%)
+technical     = 120_000_000  # Computing, technical docs & how-to (10%)
+domain_haf    =  60_000_000  # Health, agriculture, business & finance (5%)
+
+[tokenizer]
+# Gemma-4 tokenizer. .env dagi UFL_TOKENIZER_MODEL_ID bu qiymatni override qiladi.
+model_id = "google/gemma-4-4b-it"
+local_dir = "models/tokenizer"
+# Taxminiy hisob uchun fallback nisbat (tokenizer topilmasa yoki tezkor tekshiruv uchun ham ishlatiladi).
+chars_per_token = 4.0
+
+[normalize]
+# "ascii" -> o' g' (oddiy apostrof, train uchun standart)
+# "unicode" -> oʻ gʻ (rasmiy o'zbek belgisi)
+apostrophe_mode = "ascii"
+quote_style = "straight"
+
+[quality]
+min_chars = 25
+min_words = 4
+max_non_letter_ratio = 0.40
+max_repeated_ngram_ratio = 0.30
+max_upper_ratio = 0.70
+max_url_ratio = 0.20
+
+[language]
+min_confidence = 0.65
+fasttext_model_path = "models/lid.176.ftz"
+
+[ocr]
+languages = "uzb+uzb_cyrl"
+min_confidence = 60
+dpi = 300
+
+[structure]
+header_footer_min_repeats = 3
+detect_toc = true
+detect_bibliography = true
+
+[dedup]
+enabled = true
+near_dup_enabled = false  # Faza 2+ (MinHash LSH)

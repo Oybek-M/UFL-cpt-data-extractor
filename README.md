@@ -21,6 +21,7 @@ Kitob va hujjatlardan (PDF, EPUB, DJVU, DOCX, FB2, TXT, HTML, copy-paste) **faqa
 ```bash
 docker compose build
 docker compose run --rm ufl ufl version
+docker compose run --rm ufl python scripts/fetch_models.py   # bir marta, oflayn uchun
 # Kitoblarni data/input/<kategoriya>/ ga tashlang, keyin:
 docker compose run --rm ufl ufl run data/input
 docker compose run --rm ufl ufl stats

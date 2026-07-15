@@ -153,6 +153,7 @@ sudo certbot --nginx -d ufl.example.uz
 |---|---|
 | Image qurish/yangilash | `docker compose build` |
 | Versiya | `docker compose run --rm ufl ufl version` |
+| Modellarni yuklash (bir marta, oflayn uchun) | `docker compose run --rm ufl python scripts/fetch_models.py` |
 | Batch ishlash | `docker compose run --rm ufl ufl run data/input` |
 | Statistika | `docker compose run --rm ufl ufl stats` |
 | Web UI fon rejimida | `docker compose up -d web` |
