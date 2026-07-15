@@ -1,0 +1,53 @@
+# === MAXFIY / SECRET — hech qachon commit qilinmasin (repo public bo'ladi) ===
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*credentials*
+*secret*
+*token*
+
+# === Data (kitob matni, mualliflik huquqi) ===
+/data/input/**
+/data/output/**
+/data/rejected/**
+/data/reports/**
+!/data/input/.gitkeep
+!/data/output/.gitkeep
+!/data/rejected/.gitkeep
+!/data/reports/.gitkeep
+
+# === Models (og'ir fayllar, tokenizer cache) ===
+/models/**
+!/models/.gitkeep
+
+# === Databases ===
+*.db
+*.sqlite
+*.sqlite3
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# === OS / Editor ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# === Docker ===
+*.log
