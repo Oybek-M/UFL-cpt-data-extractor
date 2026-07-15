@@ -10,6 +10,7 @@ _EXTENSION_MAP = {
     ".djvu": "djvu",
     ".epub": "epub",
     ".docx": "docx",
+    ".pptx": "pptx",
     ".fb2": "fb2",
     ".html": "html",
     ".htm": "html",
@@ -44,6 +45,10 @@ def _detect_zip_subtype(path: Path) -> str:
         return "unknown"
     if "mimetype" in names or any(n.endswith(".opf") for n in names):
         return "epub"
-    if "[Content_Types].xml" in names or any(n.startswith("word/") for n in names):
+    if any(n.startswith("word/") for n in names):
+        return "docx"
+    if any(n.startswith("ppt/") for n in names):
+        return "pptx"
+    if "[Content_Types].xml" in names:
         return "docx"
     return "unknown"

@@ -97,3 +97,25 @@ class Store:
     def book_count(self) -> int:
         cur = self._conn.execute("SELECT COUNT(*) FROM books")
         return cur.fetchone()[0]
+
+    def list_books(self) -> list[BookRecord]:
+        cur = self._conn.execute(
+            "SELECT path, category, format, char_count, estimated_tokens, exact_tokens, "
+            "total_blocks, kept_blocks, dropped_pct FROM books ORDER BY path"
+        )
+        return [BookRecord(*row) for row in cur.fetchall()]
+
+    def remove_book(self, path: str) -> bool:
+        cur = self._conn.execute("DELETE FROM books WHERE path = ?", (path,))
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def clear_category(self, category: str) -> int:
+        cur = self._conn.execute("DELETE FROM books WHERE category = ?", (category,))
+        self._conn.commit()
+        return cur.rowcount
+
+    def clear_all(self) -> int:
+        cur = self._conn.execute("DELETE FROM books")
+        self._conn.commit()
+        return cur.rowcount

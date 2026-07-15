@@ -24,6 +24,7 @@ from ufl.ingest import epub as epub_module
 from ufl.ingest import fb2 as fb2_module
 from ufl.ingest import html as html_module
 from ufl.ingest import pdf as pdf_module
+from ufl.ingest import pptx as pptx_module
 from ufl.ingest import txt as txt_module
 from ufl.ingest.base import Document
 from ufl.stats.tokens import TokenCounter, count_tokens
@@ -33,6 +34,7 @@ _EXTRACTORS = {
     "djvu": djvu_module.extract,
     "epub": epub_module.extract,
     "docx": docx_module.extract,
+    "pptx": pptx_module.extract,
     "fb2": fb2_module.extract,
     "html": html_module.extract,
     "txt": txt_module.extract,

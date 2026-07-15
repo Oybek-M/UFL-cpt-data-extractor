@@ -154,12 +154,29 @@ def _infer_category(file_path: Path, root: Path) -> str:
 @app.command()
 def stats(
     config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
+    list_books: bool = typer.Option(False, "--list", help="Barcha qayta ishlangan hujjatlarni ro'yxatlash"),
+    remove: str = typer.Option(None, "--remove", help="Ko'rsatilgan path bo'yicha yozuvni o'chirish (byudjetdan chiqarish)"),
+    clear_category: str = typer.Option(None, "--clear-category", help="Kategoriyadagi barcha yozuvlarni o'chirish"),
+    clear_all: bool = typer.Option(False, "--clear-all", help="Butun byudjetni (barcha yozuvlarni) tozalash"),
 ) -> None:
-    """Jamlanma statistika va byudjet progressni ko'rsatish."""
+    """Jamlanma statistika va byudjet progressni ko'rsatish, yoki byudjetni qo'lda boshqarish."""
     setup_logging()
     config = Config.load(config_path)
 
     with Store(config.paths.db) as store:
+        if remove:
+            removed = store.remove_book(remove)
+            console.print(f"[green]O'chirildi[/green]" if removed else "[yellow]Topilmadi[/yellow]", remove)
+        if clear_category:
+            n = store.clear_category(clear_category)
+            console.print(f"[green]{n} ta yozuv o'chirildi[/green] (kategoriya: {clear_category})")
+        if clear_all:
+            n = store.clear_all()
+            console.print(f"[green]{n} ta yozuv o'chirildi[/green] (butun byudjet tozalandi)")
+        if list_books:
+            for book in store.list_books():
+                console.print(f"  [{book.category}] {book.path} — {book.estimated_tokens:,} token")
+
         collected = store.collected_tokens_by_category()
         book_count = store.book_count()
 

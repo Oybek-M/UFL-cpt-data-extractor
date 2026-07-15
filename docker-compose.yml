@@ -18,11 +18,12 @@ services:
     build: .
     image: ufl:latest
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./data:/app/data
       - ./models:/app/models
       - ./config:/app/config
       - ./src:/app/src
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     command: ["uvicorn", "ufl.web.app:app", "--host", "0.0.0.0", "--port", "8000"]

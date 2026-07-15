@@ -114,36 +114,70 @@ cd /var/www/ufl
 ### 2.4 Ishga tushirish
 ```bash
 cd /var/www/ufl
-cp .env.example .env      # sozlamalar (parol va h.k.) — .env ni tahrirlang
-docker compose build      # birinchi marta uzoqroq
+cp .env.example .env
+nano .env                 # HF_TOKEN kiritish (aniq token hisobi uchun, ixtiyoriy — §5 ga qarang)
+
+docker compose build      # birinchi marta uzoqroq (5-15 daqiqa)
 docker compose run --rm ufl ufl version
-docker compose up -d web  # Web UI'ni fon rejimida
+
+# (ixtiyoriy) fastText til modeli + Gemma tokenizer yuklab olish — bir marta:
+docker compose run --rm ufl python scripts/fetch_models.py
+
+docker compose up -d web  # Web UI'ni fon rejimida, avtomatik qayta ishga tushadi (restart: unless-stopped)
 docker compose ps         # ishlab turgan servislar
 docker compose logs -f web
 ```
+> `docker-compose.yml`da web porti `127.0.0.1:8000:8000` qilib bog'langan — ya'ni **faqat serverning o'zidan** ko'rinadi, internetdan to'g'ridan-to'g'ri kirib bo'lmaydi. Tashqariga faqat Nginx orqali (§2.5) chiqariladi. Ilovaning o'zida login/parol yo'q (kichik jamoa uchun ataylab shunday) — shuning uchun bu qadam **majburiy**, aks holda 8000-port ochiq qolib ketmaydi.
 
-### 2.5 Nginx reverse-proxy + HTTPS (Web UI'ni tashqariga chiqarish)
-> Contabo'da odатда Nginx bor. Web UI faqat `127.0.0.1:8000` da tinglaydi, tashqariga Nginx orqali chiqadi (xavfsizroq).
+### 2.5 Firewall (ufw)
+```bash
+sudo apt-get install -y ufw
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'   # 80 va 443
+sudo ufw enable               # "y" bilan tasdiqlang
+sudo ufw status
+```
+8000-port ochilmaydi — u faqat `127.0.0.1`da, tashqaridan umuman ko'rinmaydi.
 
-`/etc/nginx/sites-available/ufl` (namuna):
+### 2.6 Nginx reverse-proxy + Basic Auth + HTTPS
+> Ilovada auth yo'qligi sababli, himoyani Nginx darajasida qo'yamiz: **HTTP Basic Auth** (login/parol so'raydi) + **HTTPS**.
+
+```bash
+sudo apt-get install -y nginx apache2-utils
+# Login/parol yaratish (masalan foydalanuvchi nomi: ufl-team):
+sudo htpasswd -c /etc/nginx/.htpasswd ufl-team
+# (Yana odam qo'shish uchun -c'siz: sudo htpasswd /etc/nginx/.htpasswd ikkinchi-user)
+```
+
+`/etc/nginx/sites-available/ufl` (namuna, `nano` bilan yarating):
 ```nginx
 server {
-    server_name ufl.example.uz;   # o'z domeningiz
+    listen 80;
+    server_name ufl.example.uz;   # o'z domeningiz (yoki server IP)
+
+    auth_basic "UFL — faqat jamoa uchun";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    client_max_body_size 200M;    # katta kitob fayllari uchun
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 ```bash
 sudo ln -s /etc/nginx/sites-available/ufl /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-# HTTPS (Let's Encrypt):
+
+# Domen bo'lsa — HTTPS (Let's Encrypt), avtomatik http->https redirect ham qiladi:
 sudo apt-get install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d ufl.example.uz
 ```
-> **Privacy:** Web UI **parol** bilan himoyalangan (`.env` da), va Nginx'da IP allowlist ham qo'shsa bo'ladi.
+> Domeningiz yo'q, faqat IP orqali kirmoqchi bo'lsangiz — HTTPS qadamini o'tkazib yuborsangiz ham bo'ladi (`server_name` o'rniga IP yozing), lekin login/parol brauzerda shifrlanmagan holda ketadi — faqat ishonchli tarmoqda (masalan VPN) ishlating. Imkon qadar domen + HTTPS tavsiya qilinadi.
 
 ---
 
@@ -184,4 +218,5 @@ sudo certbot --nginx -d ufl.example.uz
 - **Ma'lumot yo'qolmaydi:** `data/` va `models/` host papkada — container o'chsa ham qoladi.
 - **Yangilash oson:** kod o'zgarsa `docker compose build` yetadi, tizimga hech narsa o'rnatmaysiz.
 - **Windows ↔ VPS bir xil:** bir xil image, shuning uchun natija bir xil.
-- **Xavfsizlik:** VPS'da Web UI'ni **doim parol/HTTPS** orqasida saqlang (privacy — loyihamizning asosiy qadriyati).
+- **Xavfsizlik:** Ilovaning o'zida auth yo'q — VPS'da Web UI **doim** Nginx Basic Auth + firewall orqasida bo'lishi shart (§2.5-2.6). 8000-portni hech qachon to'g'ridan-to'g'ri internetga ochmang.
+- **Aniq token hisobi:** faqat `scripts/fetch_models.py` ishga tushirilib, Gemma tokenizer yuklab olingandan keyin ishlaydi (gated model — avval HuggingFace'da litsenziyani qabul qilish va `.env`ga `HF_TOKEN` qo'yish kerak). Topilmasa pipeline avtomatik taxminiy (belgi-nisbati) hisobga o'tadi, crash bo'lmaydi.
