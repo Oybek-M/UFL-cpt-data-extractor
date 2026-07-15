@@ -47,6 +47,7 @@ class QualityConfig(BaseModel):
 
 class LanguageConfig(BaseModel):
     min_confidence: float
+    min_heuristic_score: float
     fasttext_model_path: Path
 
 

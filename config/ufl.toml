@@ -43,6 +43,7 @@ max_url_ratio = 0.20
 
 [language]
 min_confidence = 0.65
+min_heuristic_score = 0.20
 fasttext_model_path = "models/lid.176.ftz"
 
 [ocr]
