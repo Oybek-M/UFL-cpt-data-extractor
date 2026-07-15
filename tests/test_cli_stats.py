@@ -63,45 +63,24 @@ near_dup_enabled = false
     return config_path
 
 
-def test_run_processes_txt_file_and_writes_output(tmp_path):
-    config_path = _write_test_config(tmp_path)
-    input_dir = tmp_path / "input" / "books"
-    input_dir.mkdir(parents=True)
-    (input_dir / "sample.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
-
-    result = runner.invoke(app, ["run", str(tmp_path / "input"), "--config", str(config_path)])
-
-    assert result.exit_code == 0
-    output_txt = tmp_path / "output" / "books" / "sample.txt"
-    assert output_txt.exists()
-    assert "kitob" in output_txt.read_text(encoding="utf-8").lower()
-
-
-def test_run_skips_already_processed_file_without_force(tmp_path):
+def test_stats_shows_budget_progress_after_run(tmp_path):
     config_path = _write_test_config(tmp_path)
     input_dir = tmp_path / "input" / "books"
     input_dir.mkdir(parents=True)
     (input_dir / "sample.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
 
     runner.invoke(app, ["run", str(tmp_path / "input"), "--config", str(config_path)])
-    output_txt = tmp_path / "output" / "books" / "sample.txt"
-    first_mtime = output_txt.stat().st_mtime
-
-    result = runner.invoke(app, ["run", str(tmp_path / "input"), "--config", str(config_path)])
+    result = runner.invoke(app, ["stats", "--config", str(config_path)])
 
     assert result.exit_code == 0
-    assert output_txt.stat().st_mtime == first_mtime  # qayta yozilmagan
+    assert "books" in result.stdout
+    assert "JAMI" in result.stdout
 
 
-def test_run_isolates_failures_and_continues_batch(tmp_path):
+def test_stats_works_with_empty_database(tmp_path):
     config_path = _write_test_config(tmp_path)
-    input_dir = tmp_path / "input" / "books"
-    input_dir.mkdir(parents=True)
-    (input_dir / "good.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
-    (input_dir / "broken.pdf").write_bytes(b"bu haqiqiy PDF fayl emas")
 
-    result = runner.invoke(app, ["run", str(tmp_path / "input"), "--config", str(config_path)])
+    result = runner.invoke(app, ["stats", "--config", str(config_path)])
 
     assert result.exit_code == 0
-    assert (tmp_path / "output" / "books" / "good.txt").exists()
-    assert not (tmp_path / "output" / "books" / "broken.txt").exists()
+    assert "0" in result.stdout

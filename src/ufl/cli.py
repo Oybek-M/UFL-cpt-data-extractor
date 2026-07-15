@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 from rich.progress import track
+from rich.table import Table
 
 from ufl import __version__
 from ufl.clean.dedup import DeduplicationStore
@@ -14,7 +15,9 @@ from ufl.clean.language import load_fasttext_predictor
 from ufl.config import Config
 from ufl.logging_setup import setup_logging
 from ufl.pipeline import process_file, write_output
+from ufl.stats.budget import compute_budget, total_budget
 from ufl.stats.tokens import load_tokenizer_counter
+from ufl.store.db import BookRecord, Store
 
 app = typer.Typer(name="ufl", help="Uzbek CPT data pipeline — kitoblardan toza matn ajratib olish.")
 console = Console()
@@ -71,42 +74,59 @@ def run(
     error_count = 0
     total_estimated_tokens = 0
 
-    for file_path in track(files, description="Qayta ishlanmoqda...", console=console):
-        category = _infer_category(file_path, input_path)
-        output_txt_path = config.paths.output / category / f"{file_path.stem}.txt"
-        if output_txt_path.exists() and not force:
-            skip_count += 1
-            continue
+    with Store(config.paths.db) as store:
+        for file_path in track(files, description="Qayta ishlanmoqda...", console=console):
+            category = _infer_category(file_path, input_path)
+            source_key = str(file_path)
+            if store.is_processed(source_key) and not force:
+                skip_count += 1
+                continue
 
-        try:
-            result = process_file(
-                file_path,
-                category=category,
-                dedup_store=dedup_store,
-                fasttext_predict=fasttext_predict,
-                exact_token_counter=exact_token_counter,
-                chars_per_token=config.tokenizer.chars_per_token,
-                header_footer_min_repeats=config.structure.header_footer_min_repeats,
-                detect_toc=config.structure.detect_toc,
-                detect_bibliography=config.structure.detect_bibliography,
-                min_language_confidence=config.language.min_confidence,
-                min_heuristic_score=config.language.min_heuristic_score,
-                apostrophe_mode=config.normalize.apostrophe_mode,
-                quality_kwargs=quality_kwargs,
-            )
-            write_output(
-                result,
-                output_dir=config.paths.output,
-                rejected_dir=config.paths.rejected,
-                reports_dir=config.paths.reports,
-            )
-        except Exception as exc:  # noqa: BLE001 — fayl izolyatsiyasi: batch to'xtamasin
-            error_count += 1
-            console.print(f"[red]Xato:[/red] {file_path} — {exc}")
-            continue
+            try:
+                result = process_file(
+                    file_path,
+                    category=category,
+                    dedup_store=dedup_store,
+                    fasttext_predict=fasttext_predict,
+                    exact_token_counter=exact_token_counter,
+                    chars_per_token=config.tokenizer.chars_per_token,
+                    header_footer_min_repeats=config.structure.header_footer_min_repeats,
+                    detect_toc=config.structure.detect_toc,
+                    detect_bibliography=config.structure.detect_bibliography,
+                    min_language_confidence=config.language.min_confidence,
+                    min_heuristic_score=config.language.min_heuristic_score,
+                    apostrophe_mode=config.normalize.apostrophe_mode,
+                    quality_kwargs=quality_kwargs,
+                )
+                write_output(
+                    result,
+                    output_dir=config.paths.output,
+                    rejected_dir=config.paths.rejected,
+                    reports_dir=config.paths.reports,
+                )
+                dropped_pct = (
+                    len(result.dropped) / result.total_blocks * 100 if result.total_blocks else 0.0
+                )
+                store.record_book(
+                    BookRecord(
+                        path=source_key,
+                        category=category,
+                        format=result.format,
+                        char_count=result.char_count,
+                        estimated_tokens=result.estimated_tokens,
+                        exact_tokens=result.exact_tokens,
+                        total_blocks=result.total_blocks,
+                        kept_blocks=result.kept_blocks,
+                        dropped_pct=round(dropped_pct, 2),
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 — fayl izolyatsiyasi: batch to'xtamasin
+                error_count += 1
+                console.print(f"[red]Xato:[/red] {file_path} — {exc}")
+                continue
 
-        ok_count += 1
-        total_estimated_tokens += result.estimated_tokens
+            ok_count += 1
+            total_estimated_tokens += result.estimated_tokens
 
     console.print(
         f"\n[bold green]Tugadi.[/bold green] Muvaffaqiyatli: {ok_count}, "
@@ -138,10 +158,37 @@ def stats(
     """Jamlanma statistika va byudjet progressni ko'rsatish."""
     setup_logging()
     config = Config.load(config_path)
-    console.print(
-        "[yellow]Statistika hisobot hali implement qilinmagan (Faza 2 da qo'shiladi).[/yellow]\n"
-        f"Byudjet kategoriyalari: {list(config.budget.categories.keys())}"
+
+    with Store(config.paths.db) as store:
+        collected = store.collected_tokens_by_category()
+        book_count = store.book_count()
+
+    budgets = compute_budget(config.budget.categories, collected)
+    total = total_budget(budgets)
+
+    table = Table(title="UFL — Uzbek CPT byudjet progressi")
+    table.add_column("Kategoriya", style="bold")
+    table.add_column("Yig'ilgan", justify="right")
+    table.add_column("Maqsad", justify="right")
+    table.add_column("Progress", justify="right")
+
+    for budget in sorted(budgets, key=lambda b: b.category):
+        table.add_row(
+            budget.category,
+            f"{budget.collected_tokens:,}",
+            f"{budget.target_tokens:,}",
+            f"{budget.progress_pct:.1f}%",
+        )
+    table.add_section()
+    table.add_row(
+        f"[bold]{total.category}[/bold]",
+        f"[bold]{total.collected_tokens:,}[/bold]",
+        f"[bold]{total.target_tokens:,}[/bold]",
+        f"[bold]{total.progress_pct:.1f}%[/bold]",
     )
+
+    console.print(table)
+    console.print(f"Jami qayta ishlangan kitob/hujjat: [bold]{book_count}[/bold]")
 
 
 if __name__ == "__main__":

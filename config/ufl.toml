@@ -7,6 +7,7 @@ output = "data/output"
 rejected = "data/rejected"
 reports = "data/reports"
 models_dir = "models"
+db = "data/ufl.db"
 
 # Uzbek CPT token byudjeti (maqsad).
 # Spec: docs/superpowers/specs/2026-07-15-ufl-data-pipeline-design.md §1

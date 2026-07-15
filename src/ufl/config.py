@@ -17,6 +17,7 @@ class PathsConfig(BaseModel):
     rejected: Path
     reports: Path
     models_dir: Path
+    db: Path = Path("data/ufl.db")
 
 
 class BudgetConfig(BaseModel):
