@@ -1,8 +1,12 @@
 """Veb-sahifa URL'idan HTML yuklab olish (SSRF himoyasi bilan).
 
-Ichki/xususiy tarmoq manzillariga (localhost, 127.0.0.1, bulut metadata
-endpointlari va h.k.) so'rov yuborilishining oldi olinadi — ilova auth'siz,
-istalgan foydalanuvchi URL kiritishi mumkin bo'lgani uchun.
+Ikki qatlamli himoya:
+1. `ufl.crawl.urls.canonical_url` — string darajasi: sxema, credential, localhost,
+   literal ichki IP, ortiqcha query, uzun URL rad etiladi + normalizatsiya.
+2. Bu yerdagi DNS-guard — host haqiqatda xususiy/loopback/link-local IP'ga resolve
+   bo'lsa rad etiladi (crawl.urls string-tekshiruvi ushlamaydigan holat).
+
+Ilova auth'siz — istalgan foydalanuvchi URL kiritishi mumkin bo'lgani uchun ikkalasi ham kerak.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from ufl.crawl.urls import canonical_url
+
 _TIMEOUT_SECONDS = 15.0
 
 
@@ -21,10 +27,10 @@ class UrlFetchError(Exception):
 
 
 def fetch_html(url: str) -> str:
-    _ensure_public_http_url(url)
+    safe_url = _guard(url)
     try:
         response = httpx.get(
-            url,
+            safe_url,
             timeout=_TIMEOUT_SECONDS,
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (UFL data-pipeline)"},
@@ -32,15 +38,22 @@ def fetch_html(url: str) -> str:
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise UrlFetchError(f"Sahifani yuklab bo'lmadi: {exc}") from exc
-    _ensure_public_http_url(str(response.url))  # redirect ichki manzilga olib bormaganini tekshirish
+    _guard(str(response.url))  # redirect ichki manzilga olib bormaganini tekshirish
     return response.text
 
 
-def _ensure_public_http_url(url: str) -> None:
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise UrlFetchError("Faqat http(s) URL qo'llab-quvvatlanadi")
-    hostname = parsed.hostname
+def _guard(url: str) -> str:
+    """Kanonizatsiya (string SSRF) + DNS-guard. Xавfli/yaroqsiz bo'lsa UrlFetchError."""
+    try:
+        safe = canonical_url(url)
+    except ValueError as exc:
+        raise UrlFetchError(str(exc)) from exc
+    _ensure_public_host(safe)
+    return safe
+
+
+def _ensure_public_host(url: str) -> None:
+    hostname = urlparse(url).hostname
     if not hostname:
         raise UrlFetchError("URL noto'g'ri")
     try:

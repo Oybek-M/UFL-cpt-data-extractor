@@ -20,6 +20,7 @@ access_token*
 /data/output/**
 /data/rejected/**
 /data/reports/**
+/data/collected/**
 !/data/input/.gitkeep
 !/data/output/.gitkeep
 !/data/rejected/.gitkeep
