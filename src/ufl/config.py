@@ -70,6 +70,18 @@ class DedupConfig(BaseModel):
     near_dup_enabled: bool
 
 
+class CrawlConfig(BaseModel):
+    output_dir: Path = Path("data/collected")
+    request_timeout: float = 60.0
+    request_delay: float = 0.6
+    root_refresh_seconds: int = 300
+    idle_sleep_seconds: int = 10
+    shard_limit_bytes: int = 52_428_800
+    user_agent: str = "UFL-Collector/1.0 (+https://ufl.ibos.uz)"
+    min_local_chars: int = 700
+    min_clean_chars: int = 250
+
+
 class Config(BaseModel):
     paths: PathsConfig
     budget: BudgetConfig
@@ -80,6 +92,7 @@ class Config(BaseModel):
     ocr: OcrConfig
     structure: StructureConfig
     dedup: DedupConfig
+    crawl: CrawlConfig = CrawlConfig()
 
     @classmethod
     def load(cls, path: Path | str = DEFAULT_CONFIG_PATH) -> "Config":

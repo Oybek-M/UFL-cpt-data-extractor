@@ -70,3 +70,15 @@ detect_bibliography = true
 [dedup]
 enabled = true
 near_dup_enabled = false  # Faza 2+ (MinHash LSH)
+
+# Website crawler (Faza 4.1+). Qoidalar: docs/superpowers/specs/2026-07-16-website-crawler-integration-design.md §8
+[crawl]
+output_dir = "data/collected"
+request_timeout = 60
+request_delay = 0.6          # bir xost uchun so'rovlar orasidagi minimal kechikish (s)
+root_refresh_seconds = 300   # sitemap qayta tekshirish oralig'i
+idle_sleep_seconds = 10
+shard_limit_bytes = 52_428_800  # 50 MiB — bundling chegarasi
+user_agent = "UFL-Collector/1.0 (+https://ufl.ibos.uz)"
+min_local_chars = 700        # kalitsiz local qabul uchun minimal nomzod uzunligi
+min_clean_chars = 250        # tozalashdan keyin minimal tana uzunligi

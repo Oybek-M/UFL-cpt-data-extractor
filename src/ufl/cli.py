@@ -14,6 +14,11 @@ from ufl.cleanup import cleanup_logs
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.config import Config
+from ufl.crawl.collector import Collector
+from ufl.crawl.state import CrawlState
+from ufl.crawl.urls import domain_folder, prepare_url
+from ufl.crawl.web_client import RobotsPolicy, WebClient
+from ufl.crawl.writer import BundledWriter
 from ufl.logging_setup import setup_logging
 from ufl.pipeline import process_file, write_output
 from ufl.stats.budget import compute_budget, total_budget
@@ -22,6 +27,11 @@ from ufl.store.db import BookRecord, Store
 
 app = typer.Typer(name="ufl", help="Uzbek CPT data pipeline — kitoblardan toza matn ajratib olish.")
 console = Console()
+
+CRAWL_CATEGORIES = [
+    "web_news", "gov_legal", "education", "reference",
+    "books", "conversations", "technical", "domain_haf",
+]
 
 
 @app.command()
@@ -207,6 +217,118 @@ def stats(
 
     console.print(table)
     console.print(f"Jami qayta ishlangan kitob/hujjat: [bold]{book_count}[/bold]")
+
+
+def _build_web_client(config: Config) -> WebClient:
+    return WebClient(
+        user_agent=config.crawl.user_agent,
+        request_delay=config.crawl.request_delay,
+        timeout=config.crawl.request_timeout,
+    )
+
+
+@app.command()
+def crawl(
+    url: str = typer.Argument(..., help="Crawl qilinadigan sayt manzili (masalan https://kun.uz)"),
+    category: str = typer.Option(
+        ..., "--category", help="8 kategoriyadan biri yoki 'auto' (MiniMax kalibrlash — Faza 4.7)"
+    ),
+    config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
+    max_articles: int = typer.Option(
+        0, "--max-articles", help="Shuncha maqola yig'ilgandan keyin to'xtash (0 — cheklovsiz)"
+    ),
+    once: bool = typer.Option(
+        False, "--once", help="Navbat bo'shaguncha ishlab, keyin to'xtash (uzluksiz emas)"
+    ),
+    max_steps: int = typer.Option(0, "--max-steps", help="Shuncha qadamdan keyin to'xtash (0 — cheklovsiz)"),
+) -> None:
+    """Sayt/blog/portaldan toza o'zbekcha matn yig'ish (resumable, newest-first)."""
+    setup_logging()
+    if category != "auto" and category not in CRAWL_CATEGORIES:
+        console.print(
+            f"[bold red]Xato:[/bold red] noto'g'ri kategoriya '{category}'. "
+            f"Ruxsat etilgan: {', '.join(CRAWL_CATEGORIES)} yoki 'auto'."
+        )
+        raise typer.Exit(code=1)
+
+    config = Config.load(config_path)
+    seed = prepare_url(url)
+    domain = domain_folder(seed)
+
+    state = CrawlState(config.crawl.output_dir / domain / "_state")
+    web = _build_web_client(config)
+    robots = RobotsPolicy(seed, web, user_agent=config.crawl.user_agent)
+    store = Store(config.paths.db)
+    exact_token_counter = load_tokenizer_counter(config.tokenizer.local_dir, config.tokenizer.model_id)
+    writer = BundledWriter(
+        config.crawl.output_dir,
+        state=state,
+        domain=domain,
+        store=store,
+        shard_limit_bytes=config.crawl.shard_limit_bytes,
+        exact_token_counter=exact_token_counter,
+        chars_per_token=config.tokenizer.chars_per_token,
+    )
+    fasttext_predict = load_fasttext_predictor(config.language.fasttext_model_path)
+    quality_kwargs = {
+        "min_chars": config.quality.min_chars,
+        "min_words": config.quality.min_words,
+        "max_non_letter_ratio": config.quality.max_non_letter_ratio,
+        "max_repeated_ngram_ratio": config.quality.max_repeated_ngram_ratio,
+        "max_upper_ratio": config.quality.max_upper_ratio,
+        "max_url_ratio": config.quality.max_url_ratio,
+    }
+
+    collector = Collector(
+        seed,
+        state=state,
+        web=web,
+        robots=robots,
+        writer=writer,
+        category_mode=category,
+        valid_categories=CRAWL_CATEGORIES,
+        minimax=None,  # MiniMax integratsiyasi — Faza 4.7
+        fasttext_predict=fasttext_predict,
+        min_language_confidence=config.language.min_confidence,
+        min_heuristic_score=config.language.min_heuristic_score,
+        apostrophe_mode=config.normalize.apostrophe_mode,
+        quality_kwargs=quality_kwargs,
+        min_clean_chars=config.crawl.min_clean_chars,
+        min_local_chars=config.crawl.min_local_chars,
+    )
+
+    console.print(f"[bold]Crawl boshlandi:[/bold] {seed} (domen: {domain}, kategoriya: {category})")
+    try:
+        collector.run(once=once, max_steps=max_steps, max_articles=max_articles)
+        final_counts = state.counts()
+    finally:
+        store.close()
+        web.close()
+        state.close()
+
+    console.print(f"[bold green]Tugadi.[/bold green] Holat: {final_counts}")
+
+
+@app.command(name="crawl-status")
+def crawl_status(
+    url: str = typer.Argument(..., help="Holatini ko'rish uchun sayt manzili"),
+    config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
+) -> None:
+    """Berilgan domen uchun crawl holatini (yig'ilgan/kutayotgan/rad) ko'rsatish."""
+    setup_logging()
+    config = Config.load(config_path)
+    seed = prepare_url(url)
+    domain = domain_folder(seed)
+
+    with CrawlState(config.crawl.output_dir / domain / "_state") as state:
+        counts = state.counts()
+
+    table = Table(title=f"Crawl holati — {domain}")
+    table.add_column("Status", style="bold")
+    table.add_column("Soni", justify="right")
+    for status, count in sorted(counts.items()):
+        table.add_row(status, str(count))
+    console.print(table)
 
 
 @app.command()
