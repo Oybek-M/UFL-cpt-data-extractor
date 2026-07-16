@@ -122,15 +122,39 @@
 
 **Fayllar:** `src/ufl/crawl/minimax.py` + `tests/test_crawl_minimax.py`
 
+> ⚠️ **TOKEN TEJASH MAJBURIY** (foydalanuvchi talabi) — dizayn spec §6.3 to'liq amalga oshirilsin.
+> Asosiy tamoyil: MiniMax token maqolalar soniga EMAS, domenlar soniga proporsional bo'lsin.
+
 **Vazifalar:**
-1. `MiniMaxClient` — manba 1123-1346 port: `maybe_process` (labellangan bloklar → API → candidate/trash/complete validatsiya → adapter kESH). Retry/backoff (429/5xx), 401/403 → blocked. Kalit faqat header'da.
-2. **Rol B (yangi):** `classify_category(text) → category` — 8 kategoriyadan biri. Noaniq → `web_news`.
-3. `categorize.py` auto rejimini MiniMax'ga ula.
-4. DI: HTTP POST funksiyasi injektlanadi — testlar soxta javob beradi (real API'siz).
+1. `MiniMaxClient` — manba 1123-1346 port: `maybe_process` (labellangan bloklar → API →
+   candidate/trash/complete validatsiya → **adapter kESH**). Token tejash mexanizmlari MAJBURIY:
+   - **Adapter kESH:** kalibratsiya domen uchun ~1 marta; keyin `state.adapter(domain)` bo'lsa
+     MiniMax UMUMAN chaqirilmaydi (Collector local ekstraksiya qiladi — bu 4.4'da ulangan).
+   - **Belgi-byudjeti:** eng ko'p 6 nomzod, jami ≤180k belgi (manba 1144-1156).
+   - **batch_hash dedup:** bir xil payload qayta yuborilmaydi.
+   - **Bounded retry:** 429/5xx → backoff, ≤5 urinish; 401/403 → `minimax_blocked` (to'liq to'xtash).
+   - `max_completion_tokens=4000`, `temperature=0.1`, `stream=false`. Kalit faqat header'da.
+2. **Rol B — auto-kategoriya, LOCAL-BIRINCHI (spec §6.2):**
+   - `categorize.py`: `resolve_category` tartibi — (a) URL-yo'l evristikasi (bepul xarita),
+     (b) `article:section`/breadcrumb meta (bepul), (c) **domen-standart kESH** (`meta`
+     jadval — bir marta aniqlangach qayta ishlatiladi), (d) faqat shundan keyin MiniMax.
+   - `classify_category(title, snippet) → category`: faqat **title + ~400 belgi**,
+     `max_completion_tokens ≈ 16`, tushuntirishsiz. Noaniq/kalitsiz → `web_news`. Natija
+     domen-standart sifatida kESHlanadi.
+3. DI: HTTP POST funksiyasi injektlanadi — testlar soxta javob beradi (real API'siz).
 
-**Testlar:** `test_minimax_selects_candidate_and_caches_adapter` (soxta javob), `test_minimax_rejects_low_confidence`, `test_minimax_rejects_incomplete`, `test_minimax_401_marks_blocked`, `test_minimax_classify_returns_valid_category`, `test_minimax_classify_falls_back_on_garbage`, `test_crawl_works_without_key` (kalitsiz — MiniMax butunlay o'tkazib yuboriladi).
+**Testlar:** `test_minimax_selects_candidate_and_caches_adapter` (soxta javob),
+`test_minimax_rejects_low_confidence`, `test_minimax_rejects_incomplete`,
+`test_minimax_401_marks_blocked`, `test_minimax_batch_hash_skips_duplicate`,
+`test_category_from_url_path_no_api` (URL-yo'l → API chaqirilmaydi),
+`test_category_domain_default_cached_no_api` (2-maqola API'siz),
+`test_minimax_classify_only_when_local_signals_absent`,
+`test_minimax_classify_falls_back_on_garbage`,
+`test_crawl_works_without_key` (kalitsiz — MiniMax butunlay o'tkazib yuboriladi).
 
-**Qabul:** GREEN; kalitsiz crawl 4.4-4.6'dagidek ishlaydi (regressiya yo'q). Kalit bilan — soxta-API test o'tadi. (Real API testi foydalanuvchi kalit bergach, qo'lda.)
+**Qabul:** GREEN; kalitsiz crawl 4.4-4.6'dagidek ishlaydi (regressiya yo'q). **Token tejash
+tasdig'i:** soxta-API chaqiruvlar sonini sanovchi test — 10 ta bir domen maqolasi uchun
+MiniMax kalibratsiya ≤1 marta + kategoriya ≤1 marta chaqirilishini isbotlaydi (har maqola emas).
 
 ---
 

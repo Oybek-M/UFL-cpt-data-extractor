@@ -166,16 +166,45 @@ maxfiylik uchun), MiniMax'ga yuboriladi. MiniMax qaytaradi: `is_article`, `candi
 sahifalarga qayta ishlatiladi). Batafsil validatsiya (§ manba 1247-1305): noto'g'ri
 page_id/candidate_id/title_block → xato; `confidence < 0.65` → rad; `complete=false` → truncated deb rad.
 
-### 6.2 Rol B — Auto-kategoriya (YANGI, UFL uchun)
-Foydalanuvchi crawl'da **auto** rejim tanlasa: har bir qabul qilingan maqolaning toza
-matni (yoki title + birinchi ~500 belgi) MiniMax'ga yuboriladi, u UFL'ning 8 kategoriyasidan
-(`web_news, gov_legal, education, reference, books, conversations, technical, domain_haf`)
-birini qaytaradi. Prompt aniq: faqat ro'yxatdan tanlash, tushuntirishsiz. Noto'g'ri/noaniq
-javob → `web_news` (standart) + log.
+### 6.2 Rol B — Auto-kategoriya (YANGI, UFL uchun) — LOCAL-BIRINCHI
+Foydalanuvchi **auto** rejim tanlasa, kategoriya quyidagi tartibda aniqlanadi. MiniMax
+faqat oxirgi chora — aksariyat maqolalar API'siz (BEPUL) kategoriyalanadi (§6.3):
+
+1. **URL-yo'l evristikasi (bepul):** ko'p saytlarda kategoriya URL'da bor
+   (`/sport/`, `/iqtisodiyot/`, `/tech/`, `/jamiyat/`). Local xarita URL segmentlarini
+   UFL kategoriyasiga bog'laydi (masalan `sport|futbol` → `web_news` yoki tegishli).
+2. **Sahifa-metadata (bepul):** `article:section`, og:section, breadcrumb'dan sayt o'z
+   bo'lim yorlig'ini oladi → UFL kategoriyasiga xaritalaydi.
+3. **Domen-standart kESH (bepul):** dastlabki bir necha maqola bir xil kategoriyaga
+   tushsa, u domen uchun standart deb kESHlanadi (`meta` jadval) — keyingi maqolalar
+   shuni ishlatadi, MiniMax chaqirilmaydi.
+4. **MiniMax (faqat noaniq bo'lsa):** 1-3 signal bermasa, MiniMax'ga faqat **title +
+   birinchi ~400 belgi** yuboriladi (to'liq matn EMAS), u 8 kategoriyadan birini qaytaradi
+   (`max_completion_tokens ≈ 16`, tushuntirishsiz). Natija domen-standart sifatida kESHlanadi.
+   Kalitsiz yoki noaniq javob → `web_news` (standart) + log.
+
+### 6.3 Token tejash strategiyasi (MAJBURIY — foydalanuvchi talabi)
+MiniMax token juda tejab ishlatilishi shart. Namunaviy collector'dan olingan mexanizmlar
+(manba 1123-1346) + UFL qo'shimchalari:
+
+| Mexanizm | Tejash |
+|---|---|
+| **Adapter kESH (eng katta tejash)** | Kalibratsiya (Rol A) domen uchun **~1 marta** chaqiriladi. Natija adapter sifatida saqlanadi (`adapters` jadval); shu domenning keyingi BARCHA sahifalari API'siz, local ekstraksiya qilinadi. Ya'ni 1000 maqolalik sayt uchun ~1 API chaqiruv, 1000 emas. |
+| **Faqat noaniq sahifalar** | Ishonchli local ekstraksiya (jsonld/nuxt/next + yetarli uzun) MiniMax'ga umuman bormaydi. Faqat noaniq layout / shubhali-qisqa / reklama-shubha sahifalar yuboriladi. |
+| **Xom HTML EMAS, labellangan bloklar** | Sahifa ixcham `title_0001`, `c001_b0001` bloklariga aylantiriladi — HTML teglar, skript, stil yuborilmaydi (payload ancha kichik). |
+| **Belgi-byudjeti** | Eng ko'p **6 nomzod**, jami **≤180k belgi**; har nomzod bloklari cheklanadi. |
+| **Batch-hash dedup** | Bir xil sahifa payload'i bir xil `batch_hash` oladi; allaqachon ishlangan bo'lsa qayta yuborilmaydi. |
+| **Domen-standart kategoriya kESH** | Auto-kategoriya (Rol B) domen uchun bir marta aniqlangach kESHlanadi — keyingi maqolalar API'siz. |
+| **Kategoriya: local-birinchi** | URL-yo'l + section-meta bepul; MiniMax faqat signal bo'lmaganda. |
+| **Kategoriya payload'i kichik** | Faqat title + ~400 belgi, `max_completion_tokens ≈ 16`. |
+| **Bounded retry** | 429/5xx → eksponensial backoff, eng ko'p 5 urinish → `manual_review`. Cheksiz sarf yo'q. |
+| **401/403 → to'liq to'xtash** | `minimax_blocked` meta o'rnatiladi; keyingi chaqiruvlar umuman qilinmaydi (kalit yangilanmaguncha). |
+| **temperature=0.1, stream=false** | Barqaror, qisqa javob. |
+
+**Amaliy natija:** butun saytni crawl qilishda MiniMax token asosan **domenlar soniga** proporsional (har domen ~1-2 kalibratsiya + ~1 kategoriya-aniqlash), maqolalar soniga EMAS. Minglab maqola uchun bir necha o'nlab API chaqiruv.
 
 **Xavfsizlik (manba 85-qatordan):** API kalit faqat `Authorization` header'da yuboriladi,
-hech qachon DB yoki log'ga yozilmaydi. Kalit `.gitignore`da (`.env`). Rate-limit (429) va
-5xx → eksponensial backoff bilan retry; 401/403 → `minimax_blocked` (qayta urinmaydi).
+hech qachon DB yoki log'ga yozilmaydi. Kalit `.gitignore`da (`.env`).
 
 ---
 
