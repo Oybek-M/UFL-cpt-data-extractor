@@ -175,6 +175,26 @@
 
 ---
 
+## FAZA 4.11 — Qo'shimcha kichik UI vazifalari (verifikatsiya kutmoqda)
+
+Bular crawler'dan mustaqil, kichik UX yaxshilanishlari. Ba'zilari **allaqachon kod yozilgan,
+lekin brauzerda test qilinmagan va VPS'ga deploy qilinmagan** — implementatsiya fazasida
+brauzer-verifikatsiya + deploy qilinadi.
+
+1. **"Hammasini nusxalash" tugmasi (result sahifasi)** — *kod yozilgan, test kutmoqda*.
+   `web/templates/result.html`ga `.txt yuklab olish` yoniga "Hammasini nusxalash" (copy-to-clipboard)
+   tugmasi qo'shildi. Kichik matnlar uchun foydalanuvchi faylsiz, to'g'ridan-to'g'ri copy-paste
+   qilib olishi mumkin. `navigator.clipboard.writeText` + `document.execCommand('copy')` fallback
+   (HTTPS ufl.ibos.uz va localhost'da ishlaydi). Bosilганda "✓ Nusxalandi" fikr-bildirgichi,
+   bo'sh matnda "Matn bo'sh".
+   - **Qoladi:** brauzerda real test (bosish → clipboard'ga tushishi), VPS'ga deploy.
+   - **Test g'oyasi:** `test_result_page_has_copy_button` (result.html'da tugma + skript borligini
+     tekshiruvchi kichik web test).
+
+*(Foydalanuvchi so'rovi: kichik text bo'lsa fayl o'rniga oddiy copy-paste imkoni.)*
+
+---
+
 ## Eslatmalar
 - **Hajm:** ~10 faza, katta feature. Har faza mustaqil qiymat beradi va alohida commit qilinadi.
 - **MiniMax kalitsiz** har fazada to'liq ishlashi shart (4.7'gacha local rejim to'liq foydali).

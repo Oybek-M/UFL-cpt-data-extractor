@@ -12,8 +12,10 @@
   dt { font-weight: 600; color: #888; }
   dd { margin: 0; }
   pre { white-space: pre-wrap; word-break: break-word; background: #80808018; padding: 1rem; border-radius: 8px; max-height: 420px; overflow-y: auto; }
-  a.button { display: inline-block; margin-top: 1rem; padding: .6rem 1.2rem; background: #2e7d32; color: white; text-decoration: none; border-radius: 6px; }
-  a.button:hover { background: #276b2a; }
+  .button { display: inline-block; margin-top: 1rem; padding: .6rem 1.2rem; background: #2e7d32; color: white; text-decoration: none; border-radius: 6px; border: none; font: inherit; cursor: pointer; }
+  .button:hover { background: #276b2a; }
+  .button.secondary { background: #1565c0; }
+  .button.secondary:hover { background: #114f96; }
   a.back { display: inline-block; margin-top: 1rem; margin-left: 1rem; }
 </style>
 </head>
@@ -31,9 +33,52 @@
       <dt>Aniq token</dt><dd>{{ result.exact_tokens if result.exact_tokens is not none else "—" }}</dd>
     </dl>
     <a class="button" href="/download/{{ result.category }}/{{ result.source_path.stem }}.txt">.txt yuklab olish</a>
+    <button type="button" class="button secondary" id="copy-btn">Hammasini nusxalash</button>
     <a class="back" href="/">← Bosh sahifaga qaytish</a>
   </div>
   <h2>Toza matn (ko'rinish)</h2>
-  <pre>{{ result.kept_text }}</pre>
+  <pre id="clean-text">{{ result.kept_text }}</pre>
+
+  <script>
+    (function () {
+      var button = document.getElementById("copy-btn");
+      var source = document.getElementById("clean-text");
+      if (!button || !source) return;
+      var label = button.textContent;
+      var timer = null;
+
+      function flash(message) {
+        button.textContent = message;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () { button.textContent = label; }, 1600);
+      }
+
+      function fallbackCopy(text) {
+        var area = document.createElement("textarea");
+        area.value = text;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        var ok = false;
+        try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+        document.body.removeChild(area);
+        return ok;
+      }
+
+      button.addEventListener("click", function () {
+        var text = source.innerText;
+        if (!text.trim()) { flash("Matn bo'sh"); return; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { flash("✓ Nusxalandi"); },
+            function () { flash(fallbackCopy(text) ? "✓ Nusxalandi" : "Nusxalab bo'lmadi"); }
+          );
+        } else {
+          flash(fallbackCopy(text) ? "✓ Nusxalandi" : "Nusxalab bo'lmadi");
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
