@@ -35,3 +35,32 @@ def test_html_extract_produces_nonempty_blocks(tmp_path):
 
     assert len(document.blocks) > 0
     assert all(b.text.strip() for b in document.blocks)
+
+
+# Yaxshilanish A: kontent faqat __NUXT_DATA__ ichida (o'qiladigan DOM'da yo'q) —
+# trafilatura yolg'iz o'zi ushlamaydi, ko'p-strategiyali ekstraktor ushlaydi.
+_NUXT_BODY = (
+    "<p>Nuxt payload ichidagi maqola tanasi yetarlicha uzun bo'lishi kerak, "
+    "chunki ekstraktor qisqa nomzodlarni rad etadi va jiddiy matnni oladi.</p>"
+    "<p>Ikkinchi paragraf qo'shimcha jumlalar bilan uzaytiriladi va tabiiy nasr bo'ladi. "
+    "Yana bir necha so'z qo'shamiz, toki chegaradan oshsin.</p>"
+)
+
+
+def test_html_ingest_uses_multistrategy_for_nuxt(tmp_path):
+    import json
+
+    payload = json.dumps(["x", f'<div class="post-content">{_NUXT_BODY}</div>'])
+    html = (
+        "<html><head><title>Nuxt sahifa</title></head><body>"
+        '<div id="app"></div>'  # o'qiladigan DOM bo'sh
+        f'<script id="__NUXT_DATA__">{payload}</script>'
+        "</body></html>"
+    )
+    path = tmp_path / "nuxt.html"
+    path.write_text(html, encoding="utf-8")
+
+    document = extract(path)
+
+    combined = " ".join(b.text for b in document.blocks)
+    assert "Nuxt payload ichidagi maqola" in combined
