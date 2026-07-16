@@ -209,7 +209,8 @@ class Collector:
             if chosen is not None:
                 self._finalize(page, chosen, title, published, soup)
             elif self.minimax is not None and getattr(self.minimax, "api_key", None):
-                self._queue_ai(page_id, "first_page_calibration")
+                reason = "first_page_calibration" if not adapter else "ambiguous_layout"
+                self._process_with_minimax(page, candidates, title, published, soup, reason)
             else:
                 strongest = candidates[0]
                 locally_safe = (
@@ -225,10 +226,21 @@ class Collector:
         return True
 
     def _finalize(self, page: object, candidate: object, title: str, published: str | None, soup: BeautifulSoup) -> None:
-        page_id = int(page["id"])  # type: ignore[index]
         raw_blocks = candidate.blocks or [  # type: ignore[attr-defined]
             part for part in candidate.text.split("\n\n") if part.strip()  # type: ignore[attr-defined]
         ]
+        self._finalize_blocks(page, candidate.method, title, published, raw_blocks, soup)  # type: ignore[attr-defined]
+
+    def _finalize_blocks(
+        self,
+        page: object,
+        method: str,
+        title: str,
+        published: str | None,
+        raw_blocks: list[str],
+        soup: BeautifulSoup,
+    ) -> None:
+        page_id = int(page["id"])  # type: ignore[index]
         clean_blocks = clean_paragraphs(
             raw_blocks,
             dedup_store=self.dedup,
@@ -257,10 +269,37 @@ class Collector:
             page,
             title=title,
             published=published,
-            method=candidate.method,  # type: ignore[attr-defined]
+            method=method,
             category=category,
             blocks=clean_blocks,
         )
+
+    def _process_with_minimax(
+        self,
+        page: object,
+        candidates: list,
+        title: str,
+        published: str | None,
+        soup: BeautifulSoup,
+        reason: str,
+    ) -> None:
+        page_id = int(page["id"])  # type: ignore[index]
+        decision = self.minimax.select_candidate(  # type: ignore[union-attr]
+            domain=self.domain,
+            page_id=page_id,
+            url=str(page["url"]),  # type: ignore[index]
+            title=title,
+            published=published,
+            reason=reason,
+            candidates=candidates,
+        )
+        if decision is None:
+            self._queue_ai(page_id, reason)
+            return
+        if decision.status == "accepted":
+            self._finalize_blocks(page, decision.method, title, published, decision.blocks, soup)
+        else:
+            self._page_error(page_id, decision.status, decision.reason or "MiniMax rad etdi", None)
 
     @staticmethod
     def _section_hint(soup: BeautifulSoup) -> str | None:

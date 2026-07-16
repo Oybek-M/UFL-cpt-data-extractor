@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import typer
@@ -15,6 +17,7 @@ from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.config import Config
 from ufl.crawl.collector import Collector
+from ufl.crawl.minimax import MiniMaxClient
 from ufl.crawl.state import CrawlState
 from ufl.crawl.urls import domain_folder, prepare_url
 from ufl.crawl.web_client import RobotsPolicy, WebClient
@@ -227,6 +230,34 @@ def _build_web_client(config: Config) -> WebClient:
     )
 
 
+def _resolve_minimax_key() -> str:
+    """MINIMAX_API_KEY env'dan; topilmasa va terminal interaktiv bo'lsa, foydalanuvchidan
+    qo'lda so'raladi (na'munaviy loyihadagi kabi). Kalit hech qachon log/DB'ga yozilmaydi."""
+    key = os.environ.get("MINIMAX_API_KEY", "").strip()
+    if key or not sys.stdin.isatty():
+        return key
+    entered = typer.prompt(
+        "MiniMax API kaliti (ixtiyoriy; faqat local ekstraksiya uchun bo'sh qoldiring)",
+        default="",
+        show_default=False,
+        hide_input=True,
+    )
+    return entered.strip()
+
+
+def _build_minimax(config: Config, state: CrawlState) -> MiniMaxClient | None:
+    key = _resolve_minimax_key()
+    if not key:
+        return None
+    return MiniMaxClient(
+        key,
+        state,
+        model=config.minimax.model,
+        url=config.minimax.url,
+        min_confidence=config.minimax.min_confidence,
+    )
+
+
 @app.command()
 def crawl(
     url: str = typer.Argument(..., help="Crawl qilinadigan sayt manzili (masalan https://kun.uz)"),
@@ -279,6 +310,10 @@ def crawl(
         "max_url_ratio": config.quality.max_url_ratio,
     }
 
+    minimax = _build_minimax(config, state)
+    if minimax is not None:
+        console.print("[green]MiniMax AI yoqildi[/green] (faqat ambigu sahifalar uchun ishlatiladi).")
+
     collector = Collector(
         seed,
         state=state,
@@ -287,7 +322,7 @@ def crawl(
         writer=writer,
         category_mode=category,
         valid_categories=CRAWL_CATEGORIES,
-        minimax=None,  # MiniMax integratsiyasi — Faza 4.7
+        minimax=minimax,
         fasttext_predict=fasttext_predict,
         min_language_confidence=config.language.min_confidence,
         min_heuristic_score=config.language.min_heuristic_score,

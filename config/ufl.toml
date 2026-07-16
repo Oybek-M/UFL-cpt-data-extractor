@@ -82,3 +82,11 @@ shard_limit_bytes = 52_428_800  # 50 MiB — bundling chegarasi
 user_agent = "UFL-Collector/1.0 (+https://ufl.ibos.uz)"
 min_local_chars = 700        # kalitsiz local qabul uchun minimal nomzod uzunligi
 min_clean_chars = 250        # tozalashdan keyin minimal tana uzunligi
+
+# MiniMax AI (ixtiyoriy) — faqat ambigu sahifalar uchun (Faza 4.7). Kalit kodga
+# yozilmaydi: MINIMAX_API_KEY muhit o'zgaruvchisidan yoki `ufl crawl` interaktiv
+# so'rovidan olinadi.
+[minimax]
+model = "MiniMax-M2.7-highspeed"
+url = "https://api.minimax.io/v1/chat/completions"
+min_confidence = 0.65

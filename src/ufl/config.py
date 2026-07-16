@@ -82,6 +82,12 @@ class CrawlConfig(BaseModel):
     min_clean_chars: int = 250
 
 
+class MiniMaxConfig(BaseModel):
+    model: str = "MiniMax-M2.7-highspeed"
+    url: str = "https://api.minimax.io/v1/chat/completions"
+    min_confidence: float = 0.65
+
+
 class Config(BaseModel):
     paths: PathsConfig
     budget: BudgetConfig
@@ -93,6 +99,7 @@ class Config(BaseModel):
     structure: StructureConfig
     dedup: DedupConfig
     crawl: CrawlConfig = CrawlConfig()
+    minimax: MiniMaxConfig = MiniMaxConfig()
 
     @classmethod
     def load(cls, path: Path | str = DEFAULT_CONFIG_PATH) -> "Config":
