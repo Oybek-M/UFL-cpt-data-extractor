@@ -11,12 +11,10 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ufl.clean.apply import clean_paragraphs
 from ufl.clean.dedup import DeduplicationStore
-from ufl.clean.language import FastTextPredictor, is_uzbek
-from ufl.clean.normalize import normalize
-from ufl.clean.quality import assess
+from ufl.clean.language import FastTextPredictor
 from ufl.clean.structure import clean_structure
-from ufl.clean.transliterate import to_latin
 from ufl.ingest import detect as detect_module
 from ufl.ingest import djvu as djvu_module
 from ufl.ingest import docx as docx_module
@@ -97,37 +95,20 @@ def process_file(
         for block, reason in structure_result.dropped
     ]
 
-    kept_paragraphs: list[str] = []
+    def _record_drop(block: object, reason: str) -> None:
+        dropped.append(DroppedBlock(text=block.text, page=block.page, reason=reason))  # type: ignore[attr-defined]
 
-    for block in structure_result.kept_blocks:
-        latin_text = to_latin(block.text)
-
-        lang_result = is_uzbek(
-            latin_text,
-            fasttext_predict=fasttext_predict,
-            min_confidence=min_language_confidence,
-            min_heuristic_score=min_heuristic_score,
-        )
-        if not lang_result.is_uzbek:
-            dropped.append(DroppedBlock(text=block.text, page=block.page, reason="til_ozbekcha_emas"))
-            continue
-
-        quality_result = assess(latin_text, **(quality_kwargs or {}))
-        if not quality_result.keep:
-            reason = quality_result.reason or "sifat"
-            dropped.append(DroppedBlock(text=block.text, page=block.page, reason=reason))
-            continue
-
-        normalized_text = normalize(latin_text, apostrophe_mode=apostrophe_mode)
-        if not normalized_text:
-            dropped.append(DroppedBlock(text=block.text, page=block.page, reason="normalizatsiyadan_song_bosh"))
-            continue
-
-        if dedup_store.check_and_add(normalized_text):
-            dropped.append(DroppedBlock(text=block.text, page=block.page, reason="takror"))
-            continue
-
-        kept_paragraphs.append(normalized_text)
+    kept_paragraphs = clean_paragraphs(
+        structure_result.kept_blocks,
+        dedup_store=dedup_store,
+        get_text=lambda block: block.text,
+        fasttext_predict=fasttext_predict,
+        min_language_confidence=min_language_confidence,
+        min_heuristic_score=min_heuristic_score,
+        apostrophe_mode=apostrophe_mode,
+        quality_kwargs=quality_kwargs,
+        on_drop=_record_drop,
+    )
 
     kept_text = "\n\n".join(kept_paragraphs)
     token_counts = count_tokens(
