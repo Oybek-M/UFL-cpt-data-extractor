@@ -17,6 +17,7 @@ from typing import Any, Iterable
 
 from bs4 import BeautifulSoup, Tag
 
+from ufl.crawl._time import normalized_time as _normalized_time
 from ufl.crawl.blocks import clean_lines, fragment_text
 from ufl.crawl.urls import date_from_url
 
@@ -274,22 +275,3 @@ def title_with_punctuation(title: str) -> str:
     if value and value[-1] not in ".!?…":
         value += "."
     return value
-
-
-def _normalized_time(value: str | None) -> str | None:
-    """ISO-ga yaqin sana stringini `YYYY-MM-DDTHH:MM:SS+00:00` ko'rinishiga keltiradi."""
-    from datetime import datetime, timezone
-
-    if not value:
-        return None
-    cleaned = value.strip().replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(cleaned)
-    except ValueError:
-        try:
-            parsed = datetime.strptime(cleaned[:10], "%Y-%m-%d")
-        except ValueError:
-            return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
