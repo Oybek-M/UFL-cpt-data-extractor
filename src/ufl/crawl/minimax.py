@@ -31,6 +31,21 @@ from ufl.crawl.blocks import clean_content_blocks
 from ufl.crawl.candidates import Candidate
 from ufl.crawl.state import CrawlState
 
+class InMemoryMetaState:
+    """`get_meta`/`set_meta` — MiniMaxClient uchun domensiz/vaqtinchalik kontekstda
+    (masalan `ufl run` fayl-avtokategoriya). Faqat joriy jarayon davomida saqlanadi —
+    doimiy CrawlState kerak emas, chunki bloklash faqat bitta batch ichida ahamiyatli."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, str] = {}
+
+    def get_meta(self, key: str) -> str | None:
+        return self._data.get(key)
+
+    def set_meta(self, key: str, value: str) -> None:
+        self._data[key] = value
+
+
 DEFAULT_MODEL = "MiniMax-M2.7-highspeed"
 DEFAULT_URL = "https://api.minimax.io/v1/chat/completions"
 MAX_CANDIDATES = 6

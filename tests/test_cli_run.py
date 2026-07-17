@@ -21,6 +21,7 @@ db = "{(tmp_path / "ufl.db").as_posix()}"
 
 [budget.categories]
 books = 1000
+education = 1000
 
 [tokenizer]
 model_id = "bu-yerda-mavjud-bolmagan/model-id-xyz"
@@ -105,3 +106,57 @@ def test_run_isolates_failures_and_continues_batch(tmp_path):
     assert result.exit_code == 0
     assert (tmp_path / "output" / "books" / "good.txt").exists()
     assert not (tmp_path / "output" / "books" / "broken.txt").exists()
+
+
+def test_run_never_touches_minimax_when_all_files_have_folder_category(tmp_path, monkeypatch):
+    """Kategoriya papka-nomidan aniqlansa, MiniMax umuman quril(may)maydi (token tejash)."""
+    config_path = _write_test_config(tmp_path)
+    input_dir = tmp_path / "input" / "books"
+    input_dir.mkdir(parents=True)
+    (input_dir / "sample.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
+    import ufl.cli as cli
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("MiniMax chaqirilmasligi kerak edi")
+
+    monkeypatch.setattr(cli, "_build_minimax", _fail)
+
+    result = runner.invoke(app, ["run", str(tmp_path / "input"), "--config", str(config_path)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "output" / "books" / "sample.txt").exists()
+
+
+def test_run_flat_file_without_minimax_falls_back_to_books(tmp_path, monkeypatch):
+    config_path = _write_test_config(tmp_path)
+    input_dir = tmp_path / "input"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    (input_dir / "erkin.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
+    import ufl.cli as cli
+
+    monkeypatch.setattr(cli, "_build_minimax", lambda *a, **k: None)
+
+    result = runner.invoke(app, ["run", str(input_dir), "--config", str(config_path)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "output" / "books" / "erkin.txt").exists()
+
+
+def test_run_flat_file_uses_minimax_category_when_available(tmp_path, monkeypatch):
+    config_path = _write_test_config(tmp_path)
+    input_dir = tmp_path / "input"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    (input_dir / "maqola.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
+    import ufl.cli as cli
+
+    class _FakeMiniMax:
+        def classify_category(self, title, snippet, valid_categories):
+            assert title == "maqola"
+            return "education"
+
+    monkeypatch.setattr(cli, "_build_minimax", lambda *a, **k: _FakeMiniMax())
+
+    result = runner.invoke(app, ["run", str(input_dir), "--config", str(config_path)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "output" / "education" / "maqola.txt").exists()

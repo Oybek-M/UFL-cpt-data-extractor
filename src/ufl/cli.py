@@ -17,7 +17,7 @@ from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.config import Config
 from ufl.crawl.collector import Collector
-from ufl.crawl.minimax import MiniMaxClient
+from ufl.crawl.minimax import InMemoryMetaState, MiniMaxClient
 from ufl.crawl.state import CrawlState
 from ufl.crawl.urls import domain_folder, prepare_url
 from ufl.crawl.web_client import RobotsPolicy, WebClient
@@ -87,10 +87,20 @@ def run(
     skip_count = 0
     error_count = 0
     total_estimated_tokens = 0
+    valid_categories = list(config.budget.categories)
+    # MiniMax faqat kategoriya-papkasiz (tekis joylashtirilgan) fayl uchraganda, birinchi
+    # marta kerak bo'lganda quriladi — barcha fayl to'g'ri papkalarda bo'lsa, umuman
+    # chaqirilmaydi/prompt qilinmaydi (token va UX tejash).
+    minimax_holder: dict[str, MiniMaxClient | None] = {}
+
+    def _minimax_for_run() -> MiniMaxClient | None:
+        if "client" not in minimax_holder:
+            minimax_holder["client"] = _build_minimax(config, InMemoryMetaState())
+        return minimax_holder["client"]
 
     with Store(config.paths.db) as store:
         for file_path in track(files, description="Qayta ishlanmoqda...", console=console):
-            category = _infer_category(file_path, input_path)
+            folder_category = _infer_category(file_path, input_path)
             source_key = str(file_path)
             if store.is_processed(source_key) and not force:
                 skip_count += 1
@@ -99,7 +109,7 @@ def run(
             try:
                 result = process_file(
                     file_path,
-                    category=category,
+                    category=folder_category,
                     dedup_store=dedup_store,
                     fasttext_predict=fasttext_predict,
                     exact_token_counter=exact_token_counter,
@@ -112,6 +122,12 @@ def run(
                     apostrophe_mode=config.normalize.apostrophe_mode,
                     quality_kwargs=quality_kwargs,
                 )
+                category = folder_category
+                if folder_category == "uncategorized":
+                    category = _resolve_file_category(
+                        file_path, result.kept_text[:400], valid_categories, _minimax_for_run()
+                    )
+                    result.category = category
                 write_output(
                     result,
                     output_dir=config.paths.output,
@@ -163,6 +179,22 @@ def _infer_category(file_path: Path, root: Path) -> str:
     except ValueError:
         return "uncategorized"
     return relative.parts[0] if len(relative.parts) > 1 else "uncategorized"
+
+
+def _resolve_file_category(
+    file_path: Path,
+    snippet: str,
+    valid_categories: list[str],
+    minimax: MiniMaxClient | None,
+) -> str:
+    """Papka-kategoriyasi bo'lmagan (tekis joylashtirilgan) fayllar uchun: MiniMax bilan
+    urinib ko'radi (ixtiyoriy, faqat shu holatda chaqiriladi — token tejash), topolmasa
+    yoki kalitsiz bo'lsa "books"ga tushadi (fayllar odatda kitob/hujjat-tipidagi manba)."""
+    if minimax is not None:
+        guess = minimax.classify_category(file_path.stem, snippet, valid_categories)
+        if guess:
+            return guess
+    return "books" if "books" in valid_categories else "uncategorized"
 
 
 @app.command()
@@ -245,7 +277,7 @@ def _resolve_minimax_key() -> str:
     return entered.strip()
 
 
-def _build_minimax(config: Config, state: CrawlState) -> MiniMaxClient | None:
+def _build_minimax(config: Config, state: CrawlState | InMemoryMetaState) -> MiniMaxClient | None:
     key = _resolve_minimax_key()
     if not key:
         return None
