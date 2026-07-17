@@ -65,6 +65,7 @@ docs/               spec, implementation plan, Docker qo'llanma
 
 ## Status
 
-🟢 Asosiy pipeline + Web UI ishlab turibdi. Crawler: 4.1–4.9 tayyor (poydevor, ko'p-strategiyali
-ekstraksiya, resumable state, writer+byudjet, CLI, MiniMax, Web UI, wiki-boilerplate filtri).
-Qolgan: 4.10 (VPS deploy).
+🟢 Asosiy pipeline + Web UI ishlab turibdi va **VPS'da production'da** (`https://ufl.ibos.uz`,
+Nginx + Basic Auth + HTTPS orqasida). Crawler: 4.1–4.10 tayyor (poydevor, ko'p-strategiyali
+ekstraksiya, resumable state, writer+byudjet, CLI, MiniMax, Web UI, wiki-boilerplate filtri,
+VPS deploy).

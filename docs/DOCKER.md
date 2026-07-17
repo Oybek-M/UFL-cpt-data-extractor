@@ -102,14 +102,38 @@ docker run --rm hello-world   # endi sudo'siz
 ```
 
 ### 2.3 Loyihani serverga olib kelish
+
+Repo **private** (GitHub'da) — VPS'dan to'g'ridan-to'g'ri `https://` bilan clone qilib
+bo'lmaydi (parol so'raydi). Read-only **deploy key** kerak:
+
 ```bash
-# Agar git bo'lsa:
+# 1) VPS'da alohida kalit yaratish (faqat shu repo uchun, faqat o'qish huquqi bilan)
+ssh-keygen -t ed25519 -f /root/.ssh/github_deploy_ufl -N "" -C "ufl-vps-deploy-key"
+cat /root/.ssh/github_deploy_ufl.pub   # shu chiqishni GitHub'ga qo'shasiz
+
+# 2) GitHub'da: repo → Settings → Deploy keys → Add deploy key → yuqoridagi public key'ni
+#    joylashtiring, "Allow write access" BELGILANMASIN (faqat o'qish yetarli)
+#    (yoki lokal kompyuterdan: gh repo deploy-key add key.pub --repo <owner>/<repo> --title "VPS")
+
+# 3) SSH host alias sozlash
+cat >> /root/.ssh/config <<'EOF'
+
+Host github-ufl
+    HostName github.com
+    User git
+    IdentityFile /root/.ssh/github_deploy_ufl
+    IdentitiesOnly yes
+EOF
+chmod 600 /root/.ssh/config
+
+# 4) Clone
 sudo apt-get install -y git
 cd /var/www
-git clone <REPO_URL> ufl   # yoki repo hali yo'q bo'lsa — scp bilan yuklang
+git clone github-ufl:<owner>/<repo>.git ufl
 cd /var/www/ufl
 ```
-> Repo hali GitHub'da bo'lmasa: Windows'dan `scp -r` bilan yoki `rsync` bilan yuklaysiz. (Sizga alohida ko'rsataman.)
+
+Shundan keyin yangilash doim oddiy: `git pull && docker compose build && docker compose up -d web`.
 
 ### 2.4 Ishga tushirish
 ```bash
