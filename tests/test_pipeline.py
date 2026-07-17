@@ -77,3 +77,34 @@ def test_write_output_creates_txt_report_and_rejected_files(tmp_path):
     assert len(rejected_lines) == 3
     first_entry = json.loads(rejected_lines[0])
     assert set(first_entry.keys()) == {"text", "page", "reason"}
+
+
+def test_process_file_without_minimax_keeps_ambiguous_blocks_unchanged(tmp_path):
+    """minimax=None (standart) — ambigu bloklar evristika natijasida qoladi, hech narsa
+    qo'shimcha tashlanmaydi (mavjud xulq-atvor o'zgarishsiz)."""
+    bibliography_like = "Rashidov, Karimova, Yusupova, Alimov birgalikda ishladi."
+    content = "\n\n".join([_UZBEK_PARAGRAPH, bibliography_like])
+    path = tmp_path / "sample.txt"
+    path.write_text(content, encoding="utf-8")
+
+    result = process_file(path, category="books", dedup_store=DeduplicationStore())
+
+    assert not any(d.reason == "minimax_shovqin" for d in result.dropped)
+
+
+def test_process_file_uses_minimax_to_drop_ambiguous_noise_block(tmp_path):
+    bibliography_like = "Rashidov, Karimova, Yusupova, Alimov birgalikda ishladi."
+    content = "\n\n".join([_UZBEK_PARAGRAPH, bibliography_like])
+    path = tmp_path / "sample.txt"
+    path.write_text(content, encoding="utf-8")
+
+    class _FakeMiniMax:
+        def arbitrate_noise_blocks(self, title, blocks):
+            return {block_id for block_id, text in blocks if "Rashidov" in text}
+
+    result = process_file(
+        path, category="books", dedup_store=DeduplicationStore(), minimax=_FakeMiniMax()
+    )
+
+    assert "Rashidov" not in result.kept_text
+    assert any(d.reason == "minimax_shovqin" for d in result.dropped)

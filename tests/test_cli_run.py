@@ -160,3 +160,47 @@ def test_run_flat_file_uses_minimax_category_when_available(tmp_path, monkeypatc
 
     assert result.exit_code == 0, result.output
     assert (tmp_path / "output" / "education" / "maqola.txt").exists()
+
+
+def test_run_verify_with_minimax_drops_flagged_ambiguous_block(tmp_path, monkeypatch):
+    config_path = _write_test_config(tmp_path)
+    input_dir = tmp_path / "input" / "books"
+    input_dir.mkdir(parents=True)
+    bibliography_like = "Rashidov, Karimova, Yusupova, Alimov birgalikda ishladi."
+    (input_dir / "sample.txt").write_text(
+        _UZBEK_PARAGRAPH + "\n\n" + bibliography_like, encoding="utf-8"
+    )
+    import ufl.cli as cli
+
+    class _FakeMiniMax:
+        def arbitrate_noise_blocks(self, title, blocks):
+            return {block_id for block_id, text in blocks if "Rashidov" in text}
+
+    monkeypatch.setattr(cli, "_build_minimax", lambda *a, **k: _FakeMiniMax())
+
+    result = runner.invoke(
+        app,
+        ["run", str(tmp_path / "input"), "--config", str(config_path), "--verify-with-minimax"],
+    )
+
+    assert result.exit_code == 0, result.output
+    output_text = (tmp_path / "output" / "books" / "sample.txt").read_text(encoding="utf-8")
+    assert "Rashidov" not in output_text
+    assert "qiziqarli" in output_text.lower() or "kitob" in output_text.lower()
+
+
+def test_run_without_flag_never_touches_minimax_for_structure(tmp_path, monkeypatch):
+    config_path = _write_test_config(tmp_path)
+    input_dir = tmp_path / "input" / "books"
+    input_dir.mkdir(parents=True)
+    (input_dir / "sample.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
+    import ufl.cli as cli
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("MiniMax chaqirilmasligi kerak edi")
+
+    monkeypatch.setattr(cli, "_build_minimax", _fail)
+
+    result = runner.invoke(app, ["run", str(tmp_path / "input"), "--config", str(config_path)])
+
+    assert result.exit_code == 0, result.output

@@ -50,6 +50,15 @@ def run(
     force: bool = typer.Option(
         False, "--force", help="Allaqachon qayta ishlangan fayllarni ham qayta ishlash"
     ),
+    verify_with_minimax: bool = typer.Option(
+        False,
+        "--verify-with-minimax",
+        help=(
+            "Evristika 'shubhali' deb qoldirgan bloklarni (front-matter/kolontitul/"
+            "bibliografiyaga o'xshash) MiniMax'ga tekshirtirish (ixtiyoriy, bitta "
+            "hujjat uchun bitta so'rov — token-tejamkor, matnni tahrirlamaydi)"
+        ),
+    ),
 ) -> None:
     """Berilgan papkadagi fayllarni pipeline orqali qayta ishlash."""
     setup_logging()
@@ -87,6 +96,7 @@ def run(
     skip_count = 0
     error_count = 0
     total_estimated_tokens = 0
+    minimax_dropped_count = 0
     valid_categories = list(config.budget.categories)
     # MiniMax faqat kategoriya-papkasiz (tekis joylashtirilgan) fayl uchraganda, birinchi
     # marta kerak bo'lganda quriladi — barcha fayl to'g'ri papkalarda bo'lsa, umuman
@@ -121,6 +131,7 @@ def run(
                     min_heuristic_score=config.language.min_heuristic_score,
                     apostrophe_mode=config.normalize.apostrophe_mode,
                     quality_kwargs=quality_kwargs,
+                    minimax=_minimax_for_run() if verify_with_minimax else None,
                 )
                 category = folder_category
                 if folder_category == "uncategorized":
@@ -157,12 +168,15 @@ def run(
 
             ok_count += 1
             total_estimated_tokens += result.estimated_tokens
+            minimax_dropped_count += sum(1 for d in result.dropped if d.reason == "minimax_shovqin")
 
     console.print(
         f"\n[bold green]Tugadi.[/bold green] Muvaffaqiyatli: {ok_count}, "
         f"O'tkazib yuborildi: {skip_count}, Xato: {error_count}. "
         f"Taxminiy yig'ilgan token: {total_estimated_tokens:,}"
     )
+    if verify_with_minimax:
+        console.print(f"MiniMax orqali qo'shimcha olib tashlangan shubhali bloklar: {minimax_dropped_count}")
 
 
 def _collect_files(input_path: Path) -> list[Path]:

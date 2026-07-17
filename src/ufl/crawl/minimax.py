@@ -352,6 +352,87 @@ class MiniMaxClient:
         guess = match.group(0) if match else ""
         return guess if guess in valid_categories else None
 
+    # --- Rol C: fayl-ekstraksiya shovqin-arbitraji (Faza: file-verify) ---
+    def arbitrate_noise_blocks(
+        self, document_title: str, blocks: list[tuple[str, str]]
+    ) -> set[str]:
+        """Fayl-ekstraksiyada evristika "shubhali" deb belgilagan (front-matter/kolontitul/
+        bibliografiyaga o'xshash, lekin qat'iy chegaradan pastroq) bloklarni BITTA
+        so'rovda ko'rib chiqadi. Faqat qaysi `block_id`lar SHOVQIN (drop qilinishi kerak)
+        ekanligini qaytaradi — matnni hech qachon o'zi tahrirlamaydi/qayta yozmaydi
+        (CPT ma'lumoti faqat manbadan, o'zgarishsiz bo'lishi shart).
+
+        Bo'sh ro'yxat, kalitsiz, bloklangan yoki xato holatda — bo'sh to'plam (xavfsiz
+        standart: hech narsa qo'shimcha tashlanmaydi, evristika natijasi o'zgarishsiz qoladi).
+        """
+        if not self.api_key or self.blocked or not blocks:
+            return set()
+        payload_blocks: list[dict[str, str]] = []
+        total_chars = 0
+        for block_id, text in blocks[:60]:
+            if payload_blocks and total_chars + len(text) > 20_000:
+                break
+            payload_blocks.append({"block_id": block_id, "text": text})
+            total_chars += len(text)
+        request_body = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You identify structural noise (front matter, running headers/"
+                        "footers, bibliography-like fragments) in already-extracted book "
+                        "text. You never rewrite or summarize text."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "instruction": (
+                                "Each block below was kept by a heuristic but flagged as "
+                                "borderline. Return the block_ids that are noise (title-page/"
+                                "copyright/publisher front-matter, repeated running header/"
+                                "footer text, or bibliography/reference-list entries) and "
+                                "should be REMOVED from the CPT text. Keep everything that "
+                                "looks like genuine article/book body content. Return one "
+                                "JSON object: {\"drop_block_ids\": [...]}"
+                            ),
+                            "document_title": document_title[:200],
+                            "blocks": payload_blocks,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            "stream": False,
+            "max_completion_tokens": 500,
+            "temperature": 0.1,
+        }
+        try:
+            response = self._post(
+                self.url,
+                {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                request_body,
+                60.0,
+            )
+        except Exception:  # noqa: BLE001 — tarmoq xatosi: evristika natijasi o'zgarishsiz qoladi
+            return set()
+        if response.status_code in (401, 403):
+            self.state.set_meta("minimax_blocked", f"HTTP {response.status_code} at {utc_now()}")
+            return set()
+        if response.status_code != 200:
+            return set()
+        try:
+            body = response.json()
+            content = body["choices"][0]["message"]["content"]
+            decision = _first_json_object(content)
+            drop_ids = {str(value) for value in decision.get("drop_block_ids", [])}
+        except Exception:  # noqa: BLE001
+            return set()
+        valid_ids = {block["block_id"] for block in payload_blocks}
+        return drop_ids & valid_ids
+
     # --- ai_batches boshqaruvi ---
     def _upsert_pending_batch(self, batch_hash: str, domain: str, page_id: int) -> None:
         stamp = utc_now()

@@ -204,3 +204,62 @@ def test_crawl_works_without_key(tmp_path):
 
     assert decision is None
     assert client.classify_category("T", "S", _VALID) is None
+
+
+def test_arbitrate_noise_blocks_returns_flagged_ids(tmp_path):
+    state = CrawlState(tmp_path / "_state")
+
+    def fake_post(url, headers, body, timeout):
+        return _chat_response({"drop_block_ids": ["b1"]})
+
+    client = MiniMaxClient("secret-key", state, post=fake_post)
+
+    result = client.arbitrate_noise_blocks(
+        "Kitob nomi", [("b1", "Nashriyot: Toshkent, 2020"), ("b2", "Asosiy hikoya matni bu yerda davom etadi.")]
+    )
+
+    assert result == {"b1"}
+
+
+def test_arbitrate_noise_blocks_ignores_unknown_ids(tmp_path):
+    state = CrawlState(tmp_path / "_state")
+
+    def fake_post(url, headers, body, timeout):
+        return _chat_response({"drop_block_ids": ["b1", "not-a-real-id"]})
+
+    client = MiniMaxClient("secret-key", state, post=fake_post)
+
+    result = client.arbitrate_noise_blocks("T", [("b1", "matn")])
+
+    assert result == {"b1"}  # "not-a-real-id" e'tiborga olinmadi
+
+
+def test_arbitrate_noise_blocks_returns_empty_without_key(tmp_path):
+    state = CrawlState(tmp_path / "_state")
+    client = MiniMaxClient("", state, post=lambda *a: (_ for _ in ()).throw(AssertionError("chaqirilmasligi kerak")))
+
+    result = client.arbitrate_noise_blocks("T", [("b1", "matn")])
+
+    assert result == set()
+
+
+def test_arbitrate_noise_blocks_returns_empty_on_empty_input(tmp_path):
+    state = CrawlState(tmp_path / "_state")
+    client = MiniMaxClient("secret-key", state, post=lambda *a: (_ for _ in ()).throw(AssertionError("chaqirilmasligi kerak")))
+
+    result = client.arbitrate_noise_blocks("T", [])
+
+    assert result == set()
+
+
+def test_arbitrate_noise_blocks_fails_open_on_error(tmp_path):
+    state = CrawlState(tmp_path / "_state")
+
+    def fake_post(url, headers, body, timeout):
+        return _FakeResponse(500, text="server error")
+
+    client = MiniMaxClient("secret-key", state, post=fake_post)
+
+    result = client.arbitrate_noise_blocks("T", [("b1", "matn")])
+
+    assert result == set()

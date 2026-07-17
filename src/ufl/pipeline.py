@@ -14,7 +14,8 @@ from pathlib import Path
 from ufl.clean.apply import clean_paragraphs
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import FastTextPredictor
-from ufl.clean.structure import clean_structure
+from ufl.clean.structure import clean_structure, find_ambiguous_kept_blocks
+from ufl.crawl.minimax import MiniMaxClient
 from ufl.ingest import detect as detect_module
 from ufl.ingest import djvu as djvu_module
 from ufl.ingest import docx as docx_module
@@ -75,6 +76,7 @@ def process_file(
     min_heuristic_score: float = 0.20,
     apostrophe_mode: str = "ascii",
     quality_kwargs: dict | None = None,
+    minimax: MiniMaxClient | None = None,
 ) -> ProcessResult:
     file_format = detect_module.detect_format(path)
     extractor = _EXTRACTORS.get(file_format)
@@ -94,6 +96,25 @@ def process_file(
         DroppedBlock(text=block.text, page=block.page, reason=reason)
         for block, reason in structure_result.dropped
     ]
+
+    # Ixtiyoriy (opt-in): evristika "shubhali" deb qoldirgan bloklarni MiniMax'ga bitta
+    # so'rovda tekshiradi (token-tejamkor — faqat shunday bloklar bo'lsagina chaqiriladi,
+    # matnni hech qachon o'zi tahrirlamaydi, faqat qoldirish/tashlash qarori beradi).
+    if minimax is not None:
+        ambiguous_blocks = find_ambiguous_kept_blocks(structure_result.kept_blocks)
+        if ambiguous_blocks:
+            labeled = [(str(index), block.text) for index, block in enumerate(ambiguous_blocks)]
+            drop_ids = minimax.arbitrate_noise_blocks(path.stem, labeled)
+            if drop_ids:
+                to_drop = {id(ambiguous_blocks[int(bid)]) for bid in drop_ids}
+                for bid in drop_ids:
+                    block = ambiguous_blocks[int(bid)]
+                    dropped.append(
+                        DroppedBlock(text=block.text, page=block.page, reason="minimax_shovqin")
+                    )
+                structure_result.kept_blocks = [
+                    block for block in structure_result.kept_blocks if id(block) not in to_drop
+                ]
 
     def _record_drop(block: object, reason: str) -> None:
         dropped.append(DroppedBlock(text=block.text, page=block.page, reason=reason))  # type: ignore[attr-defined]

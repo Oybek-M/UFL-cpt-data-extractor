@@ -285,3 +285,45 @@ tekshiring. Collector robots.txt'ni avtomatik hurmat qiladi va odobli so'rov tez
 (`request_delay`) ta'minlaydi, lekin bu huquqiy javobgarlikni bekor qilmaydi — yig'ilgan
 matnни CPT uchun ishlatishdan oldin har doim manba saytning litsenziya/mualliflik-huquqi
 shartlarini o'zingiz tasdiqlang.
+
+---
+
+## 7. Fayllardan (eBook/hujjat) data extract qilish
+
+`ufl run` — PDF/DjVu/EPUB/DOCX/PPTX/FB2/HTML/TXT fayllarni avtomatik ekstraksiya qiladi.
+Fayllarni kategoriya-papkalarga joylashtirish shart emas — bitta tekis papkaga tashlab
+qo'ysangiz ham bo'ladi.
+
+### 7.1 Tekis papka (avto-kategoriya)
+
+```bash
+# Har bir fayl mustaqil ravishda qayta ishlanadi, natija fayl-nomi bo'yicha yoziladi
+docker compose run --rm ufl ufl run data/input
+```
+
+Kategoriya papka nomidan aniqlanadi (masalan `data/input/books/kitob.pdf` → `books`).
+Fayl tekis papkada (kategoriya-papkasiz) bo'lsa: avval mahalliy taxmin, keyin (agar
+MiniMax kaliti mavjud bo'lsa) fayl nomi+parcha asosida MiniMax kategoriya taklif qiladi,
+aks holda standart bo'yicha `books` ga tushadi.
+
+### 7.2 MiniMax orqali struktura tekshiruvi (ixtiyoriy, `--verify-with-minimax`)
+
+Evristika (`clean/structure.py`) aksariyat shovqinni (kolontitul, sahifa raqami,
+mundarija, bibliografiya) qat'iy qoidalar bilan olib tashlaydi. Qat'iy chegaradan "bir
+pog'ona pastroq" — ya'ni evristika saqlab qolgan, lekin shubhali — bloklar bo'lsa,
+`--verify-with-minimax` bayrog'i ularni **bitta hujjat uchun bitta so'rovda** MiniMax'ga
+yuboradi:
+
+```bash
+docker compose run --rm ufl ufl run data/input --verify-with-minimax
+```
+
+Muhim qoidalar:
+- MiniMax **matnni hech qachon tahrirlamaydi yoki qayta yozmaydi** — faqat "bu blok
+  shovqinmi (tashlash) yoki yo'qmi (qoldirish)" qarorini beradi. CPT matni har doim
+  original manbadan olinadi.
+- Faqat haqiqatan ham shubhali bloklar bo'lsa chaqiriladi — aniq hujjatlarda (aksariyati)
+  MiniMax umuman ishlatilmaydi (token sarfi yo'q).
+- Xato/kalit yo'qligi/tarmoq muammosi bo'lsa — **hech narsa qo'shimcha tashlanmaydi**
+  (fail-open): evristika natijasi o'zgarishsiz qoladi, dastur hech qachon buzilmaydi.
+- Bayroqsiz (standart) `ufl run` MiniMax'ga umuman murojaat qilmaydi.

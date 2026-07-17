@@ -72,6 +72,45 @@ def clean_structure(
     return StructureResult(kept_blocks=kept, dropped=dropped)
 
 
+def find_ambiguous_kept_blocks(
+    kept_blocks: list[Block],
+    *,
+    front_matter_max_page: int = 3,
+    front_matter_max_chars: int = 150,
+) -> list[Block]:
+    """`clean_structure` KEPT deb topgan, lekin qat'iy chegaradan bir pog'ona pastroq
+    ("shubhali") bloklarni topadi — bular ixtiyoriy MiniMax arbitrajiga (Faza: fayl-
+    ekstraksiya token-tejamkor tekshiruvi) yuborilishi mumkin. Hech narsa topilmasa —
+    bo'sh ro'yxat (standart holat, hech qanday qo'shimcha xarajat bo'lmaydi).
+
+    Signal (har biri qat'iy qoidaning "bir pog'ona pastroq" versiyasi):
+    - kamida 2 marta takrorlangan (lekin qat'iy `header_footer_min_repeats`ga yetmagan);
+    - front-matter sahifasida (birinchi `front_matter_max_page`) va qisqa, lekin kalit
+      so'zsiz;
+    - bibliografiya naqshiga yaqin: vergul-soni qat'iy chegaradan (3) bitta pastroq (2),
+      lekin baribir yil mavjud va blok qisqa (<=300 belgi).
+    """
+    near_repeat_texts = _find_repeated_header_footer_texts(kept_blocks, min_repeats=2)
+    ambiguous: list[Block] = []
+    for block in kept_blocks:
+        text = block.text.strip()
+        normalized = _normalize_for_repeat_check(text)
+        if normalized in near_repeat_texts:
+            ambiguous.append(block)
+            continue
+        if block.page <= front_matter_max_page and len(text) <= front_matter_max_chars:
+            ambiguous.append(block)
+            continue
+        separator_count = text.count(",") + text.count(";")
+        # FAQAT "vergul-soni bitta pastroq, LEKIN yil bor" holati ambigu hisoblanadi.
+        # ("vergul>=3, yilsiz" signali sinovda haqiqiy o'zbek nasridagi oddiy ko'p
+        # bo'lakli gaplarni ommaviy noto'g'ri belgilaganini aniqladik — olib tashlandi.)
+        if separator_count == 2 and len(text) <= 300 and _YEAR_RE.search(text):
+            ambiguous.append(block)
+            continue
+    return ambiguous
+
+
 def _is_page_number(text: str) -> bool:
     return bool(_PAGE_NUMBER_RE.match(text))
 

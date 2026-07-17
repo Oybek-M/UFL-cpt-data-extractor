@@ -17,6 +17,9 @@ Kitob va hujjatlardan (PDF, EPUB, DJVU, DOCX, FB2, TXT, HTML, copy-paste) **faqa
 - ✅ Web UI + VPS deploy
 - ✅ Saytdan yig'ish (crawl): CLI/Web UI orqali butun sayt/blogdan toza matn — ixtiyoriy
   MiniMax AI yordami bilan (token-tejamkor: kalibratsiya domen uchun ~1 marta)
+- ✅ Fayllardan (eBook/hujjat) extract: tekis papkaga tashlangan fayllar avtonom, mustaqil
+  qayta ishlanadi (kategoriya avto-aniqlanadi); ixtiyoriy `--verify-with-minimax` — faqat
+  shubhali bloklarni bitta so'rovda tekshiradi, matnni hech qachon tahrirlamaydi
 
 ## Tez boshlash (Docker)
 
