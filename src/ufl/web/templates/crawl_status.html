@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{% if running %}<meta http-equiv="refresh" content="5">{% endif %}
+<title>Crawl holati — {{ domain }}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  .card { border: 1px solid #80808055; border-radius: 10px; padding: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #80808033; font-size: .95rem; }
+  .badge { display: inline-block; padding: .2rem .6rem; border-radius: 999px; font-size: .8rem; font-weight: 600; }
+  .badge.running { background: #2e7d3233; color: #2e7d32; }
+  .badge.stopped { background: #80808033; color: #888; }
+  button { margin-top: 1rem; padding: .5rem 1.2rem; font: inherit; cursor: pointer; border: none; border-radius: 6px; background: #b71c1c; color: white; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+  <p><a href="/crawl">&larr; Yangi crawl</a> · <a href="/">Bosh sahifa</a></p>
+  <h1>Crawl holati — {{ domain }}</h1>
+  <p>
+    {% if running %}<span class="badge running">Ishlamoqda</span>{% else %}<span class="badge stopped">To'xtagan</span>{% endif %}
+  </p>
+
+  <div class="card">
+    {% if counts %}
+    <table>
+      <tr><th>Status</th><th>Soni</th></tr>
+      {% for status, count in counts %}
+      <tr><td>{{ status }}</td><td>{{ count }}</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p style="color:#888">Hali ma'lumot yo'q — crawl endigina boshlangan bo'lishi mumkin.</p>
+    {% endif %}
+  </div>
+
+  {% if running %}
+  <form action="/crawl/stop/{{ domain }}" method="post"
+        onsubmit="return confirm('Crawl to\'xtatilsinmi? Yig\'ilgan ma\'lumot saqlanib qoladi.');">
+    <button type="submit">To'xtatish</button>
+  </form>
+  {% endif %}
+</body>
+</html>

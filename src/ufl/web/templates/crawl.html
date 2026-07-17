@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saytdan yig'ish — UFL</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  .card { border: 1px solid #80808055; border-radius: 10px; padding: 1.25rem; }
+  label { display: block; margin: .75rem 0 .25rem; font-weight: 600; font-size: .9rem; }
+  input, select { width: 100%; padding: .5rem; box-sizing: border-box; font: inherit; border-radius: 6px; border: 1px solid #80808055; background: transparent; color: inherit; }
+  option { color: #111; background-color: #fff; }
+  button { margin-top: 1rem; padding: .6rem 1.4rem; font: inherit; cursor: pointer; border: none; border-radius: 6px; background: #2e7d32; color: white; }
+  button:hover { background: #276b2a; }
+  a { color: inherit; }
+  .hint { color: #888; font-size: .85rem; }
+</style>
+</head>
+<body>
+  <p><a href="/">&larr; Bosh sahifa</a></p>
+  <h1>Saytdan yig'ish (crawl)</h1>
+  <p class="hint">Butun sayt/blog/portaldan toza o'zbekcha matn uzluksiz yig'iladi (resumable, robots.txt hurmat qilinadi).</p>
+
+  <div class="card">
+    <form action="/crawl/start" method="post">
+      <label>Sayt manzili</label>
+      <input type="text" name="url" required placeholder="https://kun.uz">
+      <label>Kategoriya</label>
+      <select name="category">
+        {% for c in categories %}<option value="{{ c }}">{{ category_labels.get(c, c) }}</option>{% endfor %}
+        <option value="auto">Avto (MiniMax)</option>
+      </select>
+      <label>Maksimal maqola soni (ixtiyoriy, 0 — cheklovsiz)</label>
+      <input type="number" name="max_articles" value="0" min="0">
+      <button type="submit">Yig'ishni boshlash</button>
+    </form>
+  </div>
+</body>
+</html>

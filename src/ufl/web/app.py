@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -19,6 +21,8 @@ from fastapi.templating import Jinja2Templates
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.config import Config
+from ufl.crawl.state import CrawlState
+from ufl.crawl.urls import domain_folder, prepare_url
 from ufl.ingest import url as url_module
 from ufl.pipeline import ProcessResult, process_file, write_output
 from ufl.stats.budget import compute_budget, total_budget
@@ -34,6 +38,13 @@ _config = Config.load(_config_path)
 _dedup_store = DeduplicationStore()
 _fasttext_predict = load_fasttext_predictor(_config.language.fasttext_model_path)
 _exact_token_counter = load_tokenizer_counter(_config.tokenizer.local_dir, _config.tokenizer.model_id)
+
+CRAWL_CATEGORIES = [
+    "web_news", "gov_legal", "education", "reference",
+    "books", "conversations", "technical", "domain_haf",
+]
+# Har domen uchun bitta faol crawl jarayoni (bu web-server jarayoni ichida kuzatiladi).
+_crawl_processes: dict[str, subprocess.Popen] = {}
 
 _QUALITY_KWARGS = {
     "min_chars": _config.quality.min_chars,
@@ -189,6 +200,64 @@ def clear_all_books() -> RedirectResponse:
     with Store(_config.paths.db) as store:
         store.clear_all()
     return RedirectResponse("/", status_code=303)
+
+
+def _launch_crawl_process(
+    seed: str, category: str, max_articles: int, config_path: Path
+) -> subprocess.Popen:
+    args = [sys.executable, "-m", "ufl.cli", "crawl", seed, "--category", category, "--config", str(config_path)]
+    if max_articles:
+        args += ["--max-articles", str(max_articles)]
+    # Web thread'ni bloklamaslik uchun mustaqil fon jarayoni (OCR-muzlash darsi —
+    # bu ilgari butun ilovani muzlatgan xatoning aynan takrorlanishini oldini oladi).
+    return subprocess.Popen(  # noqa: S603 — argumentlar forma qiymatlaridan, shell=False
+        args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+
+
+@app.get("/crawl", response_class=HTMLResponse)
+def crawl_form(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "crawl.html",
+        {"categories": CRAWL_CATEGORIES, "category_labels": _config.budget.category_labels},
+    )
+
+
+@app.post("/crawl/start")
+def crawl_start(
+    url: str = Form(...), category: str = Form(...), max_articles: int = Form(0)
+) -> RedirectResponse:
+    seed = prepare_url(url)
+    domain = domain_folder(seed)
+    process = _crawl_processes.get(domain)
+    if process is None or process.poll() is not None:
+        _crawl_processes[domain] = _launch_crawl_process(seed, category, max_articles, _config_path)
+    return RedirectResponse(f"/crawl/status/{domain}", status_code=303)
+
+
+@app.get("/crawl/status/{domain}", response_class=HTMLResponse)
+def crawl_status_page(request: Request, domain: str) -> HTMLResponse:
+    state_dir = _config.crawl.output_dir / domain / "_state"
+    counts: dict[str, int] = {}
+    if (state_dir / "state.sqlite3").exists():
+        with CrawlState(state_dir) as state:
+            counts = state.counts()
+    process = _crawl_processes.get(domain)
+    running = process is not None and process.poll() is None
+    return templates.TemplateResponse(
+        request,
+        "crawl_status.html",
+        {"domain": domain, "counts": sorted(counts.items()), "running": running},
+    )
+
+
+@app.post("/crawl/stop/{domain}")
+def crawl_stop(domain: str) -> RedirectResponse:
+    process = _crawl_processes.get(domain)
+    if process is not None and process.poll() is None:
+        process.terminate()
+    return RedirectResponse(f"/crawl/status/{domain}", status_code=303)
 
 
 @app.get("/download/{category}/{filename}")
