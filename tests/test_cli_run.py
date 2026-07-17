@@ -189,6 +189,24 @@ def test_run_verify_with_minimax_drops_flagged_ambiguous_block(tmp_path, monkeyp
     assert "qiziqarli" in output_text.lower() or "kitob" in output_text.lower()
 
 
+def test_run_summary_uses_exact_token_count_when_tokenizer_available(tmp_path, monkeypatch):
+    """Gemma tokenizer topilganda, yakuniy xulosa taxminiy emas, ANIQ tokenni ko'rsatishi kerak."""
+    config_path = _write_test_config(tmp_path)
+    input_dir = tmp_path / "input" / "books"
+    input_dir.mkdir(parents=True)
+    (input_dir / "sample.txt").write_text(_UZBEK_PARAGRAPH, encoding="utf-8")
+    import ufl.cli as cli
+
+    monkeypatch.setattr(cli, "load_tokenizer_counter", lambda *a, **k: (lambda text: 12345))
+
+    result = runner.invoke(app, ["run", str(tmp_path / "input"), "--config", str(config_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "Aniq yig'ilgan token" in result.output
+    assert "12,345" in result.output
+    assert "Taxminiy" not in result.output
+
+
 def test_run_without_flag_never_touches_minimax_for_structure(tmp_path, monkeypatch):
     config_path = _write_test_config(tmp_path)
     input_dir = tmp_path / "input" / "books"

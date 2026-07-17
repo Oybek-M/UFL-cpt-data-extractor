@@ -91,7 +91,9 @@ class Store:
         self._conn.commit()
 
     def collected_tokens_by_category(self) -> dict[str, int]:
-        cur = self._conn.execute("SELECT category, SUM(estimated_tokens) FROM books GROUP BY category")
+        cur = self._conn.execute(
+            "SELECT category, SUM(COALESCE(exact_tokens, estimated_tokens)) FROM books GROUP BY category"
+        )
         return {category: total or 0 for category, total in cur.fetchall()}
 
     def book_count(self) -> int:

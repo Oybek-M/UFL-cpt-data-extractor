@@ -96,6 +96,7 @@ def run(
     skip_count = 0
     error_count = 0
     total_estimated_tokens = 0
+    total_exact_tokens = 0
     minimax_dropped_count = 0
     valid_categories = list(config.budget.categories)
     # MiniMax faqat kategoriya-papkasiz (tekis joylashtirilgan) fayl uchraganda, birinchi
@@ -168,12 +169,18 @@ def run(
 
             ok_count += 1
             total_estimated_tokens += result.estimated_tokens
+            total_exact_tokens += (
+                result.exact_tokens if result.exact_tokens is not None else result.estimated_tokens
+            )
             minimax_dropped_count += sum(1 for d in result.dropped if d.reason == "minimax_shovqin")
 
+    if exact_token_counter is not None:
+        token_summary = f"Aniq yig'ilgan token: {total_exact_tokens:,}"
+    else:
+        token_summary = f"Taxminiy yig'ilgan token: {total_estimated_tokens:,}"
     console.print(
         f"\n[bold green]Tugadi.[/bold green] Muvaffaqiyatli: {ok_count}, "
-        f"O'tkazib yuborildi: {skip_count}, Xato: {error_count}. "
-        f"Taxminiy yig'ilgan token: {total_estimated_tokens:,}"
+        f"O'tkazib yuborildi: {skip_count}, Xato: {error_count}. {token_summary}"
     )
     if verify_with_minimax:
         console.print(f"MiniMax orqali qo'shimcha olib tashlangan shubhali bloklar: {minimax_dropped_count}")
@@ -235,7 +242,8 @@ def stats(
             console.print(f"[green]{n} ta yozuv o'chirildi[/green] (butun byudjet tozalandi)")
         if list_books:
             for book in store.list_books():
-                console.print(f"  [{book.category}] {book.path} — {book.estimated_tokens:,} token")
+                tokens = book.exact_tokens if book.exact_tokens is not None else book.estimated_tokens
+                console.print(f"  [{book.category}] {book.path} — {tokens:,} token")
 
         collected = store.collected_tokens_by_category()
         book_count = store.book_count()

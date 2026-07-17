@@ -45,6 +45,22 @@ def test_collected_tokens_by_category_sums_across_books(tmp_path):
         assert totals["education"] == 110
 
 
+def test_collected_tokens_by_category_prefers_exact_tokens_when_available(tmp_path):
+    """Aniq Gemma-4 tokenizer mavjud bo'lganda, byudjet aniq hisobga tayanishi kerak —
+    taxminiy (belgi-nisbati) emas."""
+    with Store(tmp_path / "ufl.db") as store:
+        record_estimated_only = _make_record(path="a.txt", category="books")  # exact_tokens=None
+        record_with_exact = _make_record(path="b.txt", category="books")
+        record_with_exact.exact_tokens = 150
+        record_with_exact.estimated_tokens = 90  # atayin farqli — exact ustunlik qilishi kerak
+        store.record_book(record_estimated_only)
+        store.record_book(record_with_exact)
+
+        totals = store.collected_tokens_by_category()
+
+        assert totals["books"] == 110 + 150  # 110 (estimated, chunki exact yo'q) + 150 (exact)
+
+
 def test_store_persists_across_reconnects(tmp_path):
     db_path = tmp_path / "ufl.db"
     with Store(db_path) as store:

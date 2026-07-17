@@ -33,7 +33,7 @@ domain_haf    = "Sog'liq, qishloq xo'jaligi, biznes"
 
 [tokenizer]
 # Gemma-4 tokenizer. .env dagi UFL_TOKENIZER_MODEL_ID bu qiymatni override qiladi.
-model_id = "google/gemma-4-4b-it"
+model_id = "google/gemma-4-12B-it"
 local_dir = "models/tokenizer"
 # Taxminiy hisob uchun fallback nisbat (tokenizer topilmasa yoki tezkor tekshiruv uchun ham ishlatiladi).
 chars_per_token = 4.0
