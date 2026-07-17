@@ -18,6 +18,17 @@ _QUOTE_TARGETS = {"straight": '"'}
 _DASH_VARIANTS = "–—"  # en dash, em dash
 _INVISIBLE_CHARS = "​‌‍﻿­"
 
+# Wiki/CMS tahrir-havola qoldiqlari (masalan Wikipedia'da sarlavhaga yopishib qoladigan
+# "[tahrirlash | manbasini tahrirlash]"). Yaxshilanish B — sessiyada haqiqiy Wikipedia
+# sahifasida kuzatilgan (docs/superpowers/specs/2026-07-16-...-design.md §"Yaxshilanish B").
+_WIKI_EDIT_KEYWORDS = (
+    "manbasini tahrirlash", "tahrirlash", "tahrir", "edit", "изменить", "редактировать",
+)
+_WIKI_EDIT_GROUP = "|".join(re.escape(keyword) for keyword in _WIKI_EDIT_KEYWORDS)
+_WIKI_EDIT_RE = re.compile(
+    rf"\[\s*(?:{_WIKI_EDIT_GROUP})(?:\s*\|\s*(?:{_WIKI_EDIT_GROUP}))*\s*\]", re.IGNORECASE
+)
+
 _APOSTROPHE_RE = re.compile(f"[{re.escape(_APOSTROPHE_VARIANTS)}]")
 _QUOTE_RE = re.compile(f"[{re.escape(_DOUBLE_QUOTE_VARIANTS)}]")
 _DASH_RE = re.compile(f"[{re.escape(_DASH_VARIANTS)}]")
@@ -30,6 +41,7 @@ _BLANK_LINES_RE = re.compile(r"\n{3,}")
 
 def normalize(text: str, apostrophe_mode: str = "ascii", quote_style: str = "straight") -> str:
     text = unicodedata.normalize("NFC", text)
+    text = _WIKI_EDIT_RE.sub("", text)
     text = _INVISIBLE_RE.sub("", text)
     text = _DASH_RE.sub("-", text)
     text = _HYPHEN_LINEBREAK_RE.sub(r"\1\2", text)

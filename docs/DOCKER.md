@@ -220,3 +220,68 @@ sudo certbot --nginx -d ufl.example.uz
 - **Windows ↔ VPS bir xil:** bir xil image, shuning uchun natija bir xil.
 - **Xavfsizlik:** Ilovaning o'zida auth yo'q — VPS'da Web UI **doim** Nginx Basic Auth + firewall orqasida bo'lishi shart (§2.5-2.6). 8000-portni hech qachon to'g'ridan-to'g'ri internetga ochmang.
 - **Aniq token hisobi:** faqat `scripts/fetch_models.py` ishga tushirilib, Gemma tokenizer yuklab olingandan keyin ishlaydi (gated model — avval HuggingFace'da litsenziyani qabul qilish va `.env`ga `HF_TOKEN` qo'yish kerak). Topilmasa pipeline avtomatik taxminiy (belgi-nisbati) hisobga o'tadi, crash bo'lmaydi.
+
+---
+
+## 6. Saytdan yig'ish (crawl)
+
+Butun sayt/blog/portaldan toza o'zbekcha matnni avtomatik yig'ish (resumable, robots.txt
+hurmat qilinadi, newest-first). Dizayn: [2026-07-16-website-crawler-integration-design.md](superpowers/specs/2026-07-16-website-crawler-integration-design.md).
+
+### 6.1 CLI orqali
+
+```bash
+# Butun saytni crawl qilish (uzluksiz)
+docker compose run --rm ufl ufl crawl https://kun.uz --category web_news
+
+# MiniMax auto-klassifikatsiya (kalit kerak — pastga qarang)
+docker compose run --rm ufl ufl crawl https://daryo.uz --category auto
+
+# Sinov uchun cheklab: 5 ta maqoladan keyin to'xtaydi
+docker compose run --rm ufl ufl crawl https://kun.uz --category web_news --max-articles 5 --once
+
+# Holatni ko'rish (yig'ilgan/kutayotgan/rad hisobi)
+docker compose run --rm ufl ufl crawl-status https://kun.uz
+```
+
+### 6.2 Web UI orqali
+
+`http://localhost:8000/crawl` — forma (URL, kategoriya, maksimal maqola soni) →
+"Yig'ishni boshlash" fon jarayonini ishga tushiradi (web sahifa muzlamaydi) →
+`/crawl/status/{domen}` progress ko'rsatadi (avto-yangilanadi), "To'xtatish" tugmasi bilan
+xavfsiz to'xtatiladi (yig'ilgan ma'lumot yo'qolmaydi).
+
+### 6.3 VPS'da uzoq muddatli crawl (detached konteyner)
+
+Uzoq (kunlab) ishlaydigan crawl uchun alohida, mustaqil konteyner tavsiya etiladi —
+`web` konteyneriga resurs bo'lishmaydi:
+
+```bash
+docker compose run -d --name ufl-crawl-kunuz ufl ufl crawl https://kun.uz --category web_news
+docker logs -f ufl-crawl-kunuz          # progress
+docker stop ufl-crawl-kunuz              # to'xtatish (xavfsiz — atomik yozuv)
+```
+
+Chiqish `data/collected/<domen>/` ostida (`.gitignore`da — git'ga tushmaydi).
+
+### 6.4 MiniMax AI (ixtiyoriy, token-tejamkor)
+
+MiniMax faqat local ekstraksiya ambigu bo'lgan sahifalar uchun ishlatiladi (domen uchun
+bir marta kalibrlangach, keyingi barcha sahifalar MiniMax'siz local ishlaydi — token sarfi
+maqolalar soniga emas, domenlar soniga proporsional). Kalitsiz crawl to'liq ishlaydi.
+
+Kalitni berish uchun ikki yo'l bor:
+1. `.env`ga `MINIMAX_API_KEY=...` qo'shing (docker compose avtomatik o'qiydi).
+2. Yoki bo'sh qoldiring — interaktiv terminalda `ufl crawl` ishga tushganda kalitni
+   qo'lda kiritishni so'raydi (Enter — faqat local ekstraksiya).
+
+Kalit hech qachon kodga yozilmaydi, logga yoki DB'ga tushmaydi.
+
+### 6.5 Litsenziya / ToS eslatmasi
+
+**Muhim:** crawl faqat sizga huquqiy jihatdan ruxsat etilgan saytlar uchun ishlatilsin.
+Har bir sayt uchun avval uning **foydalanish shartlari (ToS)** va **robots.txt**'ini
+tekshiring. Collector robots.txt'ni avtomatik hurmat qiladi va odobli so'rov tezligini
+(`request_delay`) ta'minlaydi, lekin bu huquqiy javobgarlikni bekor qilmaydi — yig'ilgan
+matnни CPT uchun ishlatishdan oldin har doim manba saytning litsenziya/mualliflik-huquqi
+shartlarini o'zingiz tasdiqlang.

@@ -14,7 +14,9 @@ Kitob va hujjatlardan (PDF, EPUB, DJVU, DOCX, FB2, TXT, HTML, copy-paste) **faqa
 - ✅ Struktura tozalash (front-matter, header/footer, sahifa raqami)
 - ✅ Sifat filtri + deduplikatsiya
 - ✅ Statistika: belgi, so'z, Gemma-token, taxminiy token, byudjet progress
-- ✅ Web UI (Faza 3) + VPS deploy
+- ✅ Web UI + VPS deploy
+- ✅ Saytdan yig'ish (crawl): CLI/Web UI orqali butun sayt/blogdan toza matn — ixtiyoriy
+  MiniMax AI yordami bilan (token-tejamkor: kalibratsiya domen uchun ~1 marta)
 
 ## Tez boshlash (Docker)
 
@@ -25,9 +27,13 @@ docker compose run --rm ufl python scripts/fetch_models.py   # bir marta, oflayn
 # Kitoblarni data/input/<kategoriya>/ ga tashlang, keyin:
 docker compose run --rm ufl ufl run data/input
 docker compose run --rm ufl ufl stats
+
+# Saytdan yig'ish:
+docker compose run --rm ufl ufl crawl https://kun.uz --category web_news
 ```
 
-To'liq Docker qo'llanmasi (Windows + Ubuntu VPS): **[docs/DOCKER.md](docs/DOCKER.md)**
+To'liq Docker qo'llanmasi (Windows + Ubuntu VPS): **[docs/DOCKER.md](docs/DOCKER.md)** ·
+Crawl bo'yicha batafsil: **[docs/DOCKER.md §6](docs/DOCKER.md#6-saytdan-yigish-crawl)**
 
 ## Kategoriyalar (CPT byudjeti — 1.2B token)
 
@@ -50,8 +56,12 @@ docs/               spec, implementation plan, Docker qo'llanma
 
 - **Dizayn (spec):** [docs/superpowers/specs/2026-07-15-ufl-data-pipeline-design.md](docs/superpowers/specs/2026-07-15-ufl-data-pipeline-design.md)
 - **Implementation plan:** [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
+- **Crawler dizayn (spec):** [docs/superpowers/specs/2026-07-16-website-crawler-integration-design.md](docs/superpowers/specs/2026-07-16-website-crawler-integration-design.md)
+- **Crawler implementation plan:** [docs/IMPLEMENTATION_PLAN_CRAWLER.md](docs/IMPLEMENTATION_PLAN_CRAWLER.md)
 - **Docker qo'llanma:** [docs/DOCKER.md](docs/DOCKER.md)
 
 ## Status
 
-🟡 Rejalashtirish tugadi — implementatsiya boshlanadi (Faza 0 → 1 → 2 → 3).
+🟢 Asosiy pipeline + Web UI ishlab turibdi. Crawler: 4.1–4.9 tayyor (poydevor, ko'p-strategiyali
+ekstraksiya, resumable state, writer+byudjet, CLI, MiniMax, Web UI, wiki-boilerplate filtri).
+Qolgan: 4.10 (VPS deploy).

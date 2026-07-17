@@ -43,3 +43,14 @@ def test_normalize_removes_invisible_characters():
 def test_normalize_applies_unicode_nfc():
     decomposed = "café"  # "café" ning NFD (dekompozitsiyalangan) shakli
     assert normalize(decomposed) == "café"
+
+
+def test_normalize_strips_wiki_edit_markers_glued_to_heading():
+    text = "Tarix[tahrirlash | manbasini tahrirlash]\n\nQadimda bu yerda..."
+    assert normalize(text) == "Tarix\n\nQadimda bu yerda..."
+
+
+def test_normalize_strips_wiki_edit_markers_various_languages():
+    assert normalize("Bo'lim[tahrir]") == "Bo'lim"
+    assert normalize("Section[edit]") == "Section"
+    assert normalize("Razdel[izmenit]".replace("izmenit", "изменить")) == "Razdel"
