@@ -22,11 +22,14 @@ from ufl.crawl.state import CrawlState
 from ufl.crawl.urls import domain_folder, prepare_url
 from ufl.crawl.web_client import RobotsPolicy, WebClient
 from ufl.crawl.writer import BundledWriter
+from ufl.hf_pipeline import process_hf_shard
+from ufl.ingest.hf_dataset import SHARD_SIZE, dataset_slug, iter_shards
 from ufl.logging_setup import setup_logging
 from ufl.pipeline import process_file, write_output
 from ufl.stats.budget import compute_budget, total_budget
 from ufl.stats.tokens import load_tokenizer_counter
 from ufl.store.db import BookRecord, Store
+from ufl.store.hf_state import HFFetchState
 
 app = typer.Typer(name="ufl", help="Uzbek CPT data pipeline — kitoblardan toza matn ajratib olish.")
 console = Console()
@@ -396,6 +399,121 @@ def crawl(
         state.close()
 
     console.print(f"[bold green]Tugadi.[/bold green] Holat: {final_counts}")
+
+
+@app.command("fetch-hf")
+def fetch_hf(
+    dataset_id: str = typer.Argument(..., help="HuggingFace dataset ID (masalan tahrirchi/uz-crawl)"),
+    split: str = typer.Option(..., "--split", help="Dataset split nomi (masalan train, news, lat)"),
+    category: str = typer.Option(..., "--category", help="8 kategoriyadan biri"),
+    text_column: str = typer.Option("text", "--text-column", help="Matn ustuni nomi"),
+    limit: int = typer.Option(0, "--limit", help="Shuncha qatordan keyin to'xtash (0 — cheklovsiz)"),
+    stop_at_budget: bool = typer.Option(
+        False, "--stop-at-budget",
+        help="Kategoriya budjet-maqsadiga yetgach avtomatik to'xtash (standart: o'chiq — dataset oxirigacha ishlanadi)",
+    ),
+    config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
+) -> None:
+    """HuggingFace dataset'dan qator-baqator (streaming) toza matn yig'ish."""
+    setup_logging()
+    if category not in CRAWL_CATEGORIES:
+        console.print(
+            f"[bold red]Xato:[/bold red] noto'g'ri kategoriya '{category}'. "
+            f"Ruxsat etilgan: {', '.join(CRAWL_CATEGORIES)}."
+        )
+        raise typer.Exit(code=1)
+
+    config = Config.load(config_path)
+    slug = dataset_slug(dataset_id)
+    state_path = config.paths.db.parent / "hf_state" / f"{slug}__{split}.sqlite3"
+    fasttext_predict = load_fasttext_predictor(config.language.fasttext_model_path)
+    exact_token_counter = load_tokenizer_counter(config.tokenizer.local_dir, config.tokenizer.model_id)
+    quality_kwargs = {
+        "min_chars": config.quality.min_chars,
+        "min_words": config.quality.min_words,
+        "max_non_letter_ratio": config.quality.max_non_letter_ratio,
+        "max_repeated_ngram_ratio": config.quality.max_repeated_ngram_ratio,
+        "max_upper_ratio": config.quality.max_upper_ratio,
+        "max_url_ratio": config.quality.max_url_ratio,
+    }
+    dedup_store = DeduplicationStore()
+
+    with HFFetchState(state_path) as state, Store(config.paths.db) as store:
+        key = f"{dataset_id}::{split}"
+        shard_index = state.get_last_shard(key)
+        skip_rows = shard_index * SHARD_SIZE
+        ok_shards = 0
+        processed_rows = 0
+        kept_total = 0
+
+        for texts in iter_shards(dataset_id, split, text_column, skip_rows=skip_rows, limit=limit):
+            shard_index += 1
+            shard_label = f"{slug}__{split}__shard-{shard_index:06d}"
+            result = process_hf_shard(
+                texts,
+                shard_label=shard_label,
+                category=category,
+                dedup_store=dedup_store,
+                fasttext_predict=fasttext_predict,
+                exact_token_counter=exact_token_counter,
+                chars_per_token=config.tokenizer.chars_per_token,
+                min_language_confidence=config.language.min_confidence,
+                min_heuristic_score=config.language.min_heuristic_score,
+                apostrophe_mode=config.normalize.apostrophe_mode,
+                quality_kwargs=quality_kwargs,
+            )
+            write_output(
+                result,
+                output_dir=config.paths.output,
+                rejected_dir=config.paths.rejected,
+                reports_dir=config.paths.reports,
+            )
+            dropped_pct = (
+                len(result.dropped) / result.total_blocks * 100 if result.total_blocks else 0.0
+            )
+            store.record_book(
+                BookRecord(
+                    path=f"hf:{dataset_id}:{split}:shard-{shard_index:06d}",
+                    category=category,
+                    format=result.format,
+                    char_count=result.char_count,
+                    estimated_tokens=result.estimated_tokens,
+                    exact_tokens=result.exact_tokens,
+                    total_blocks=result.total_blocks,
+                    kept_blocks=result.kept_blocks,
+                    dropped_pct=round(dropped_pct, 2),
+                )
+            )
+            state.set_last_shard(key, shard_index)
+            ok_shards += 1
+            processed_rows += len(texts)
+            kept_total += result.kept_blocks
+            console.print(
+                f"Shard {shard_index}: {result.kept_blocks}/{result.total_blocks} saqlandi "
+                f"({result.exact_tokens or result.estimated_tokens:,} token)."
+            )
+
+            if stop_at_budget:
+                collected = store.collected_tokens_by_category()
+                target = config.budget.categories.get(category)
+                if target and collected.get(category, 0) >= target:
+                    console.print(
+                        f"[green]Budjet maqsadiga yetildi[/green] "
+                        f"({category}: {collected[category]:,}/{target:,}). To'xtatilmoqda."
+                    )
+                    break
+
+    # `datasets` kutubxonasining ba'zi native (pyarrow) thread'lari interpreter
+    # tugaganda tozalanmasdan xato berishi mumkin (kuzatilgan: PyGILState_Release
+    # crash) — aniq tozalash bu holatni oldini oladi.
+    import gc
+
+    gc.collect()
+
+    console.print(
+        f"\n[bold green]Tugadi.[/bold green] {ok_shards} shard qayta ishlandi "
+        f"({processed_rows:,} qator, {kept_total:,} saqlandi)."
+    )
 
 
 @app.command(name="crawl-status")
