@@ -15,6 +15,14 @@ def _make_record(path: str = "data/input/books/sample.txt", category: str = "boo
     )
 
 
+def test_store_uses_wal_mode_for_concurrent_writer_safety(tmp_path):
+    """Bir nechta jarayon (masalan bir nechta `ufl fetch-hf`) bir vaqtda bitta
+    ufl.db'ga yozganda "database is locked" xatosi kamayishi uchun WAL rejimi."""
+    with Store(tmp_path / "ufl.db") as store:
+        mode = store._conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert mode.lower() == "wal"
+
+
 def test_is_processed_false_before_recording(tmp_path):
     with Store(tmp_path / "ufl.db") as store:
         assert store.is_processed("data/input/books/sample.txt") is False

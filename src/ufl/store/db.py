@@ -44,7 +44,10 @@ class Store:
     def __init__(self, db_path: Path) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path))
+        # WAL: bir nechta jarayon (masalan parallel `ufl fetch-hf`) bir vaqtda
+        # yozganda "database is locked" xatosini kamaytiradi (o'qish yozishni bloklamaydi).
+        self._conn = sqlite3.connect(str(self._db_path), timeout=30.0)
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_SCHEMA)
         self._conn.commit()
 
