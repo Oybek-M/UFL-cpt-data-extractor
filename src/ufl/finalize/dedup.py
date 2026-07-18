@@ -13,11 +13,15 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from ufl.finalize.hf_rename import source_path_for_filename
+from ufl.logging_setup import get_logger
 from ufl.store.db import Store
+
+logger = get_logger(__name__)
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _ZIYOUZ_ID_RE = re.compile(r"^(\d+)_")
@@ -84,8 +88,12 @@ def quarantine_duplicates(
             dest_dir = Path(rejected_dir) / "duplicates" / category
             dest_dir.mkdir(parents=True, exist_ok=True)
             try:
-                dup_path.replace(dest_dir / dup_path.name)
-            except OSError:
+                # Path.replace() (os.rename) turli Docker bind-mountlar orasida
+                # (masalan UFL-Datas vs data/) EXDEV bilan xato beradi —
+                # shutil.move avtomatik nusxalab-o'chirishga o'tadi.
+                shutil.move(str(dup_path), str(dest_dir / dup_path.name))
+            except OSError as exc:
+                logger.warning("Dublikatni ko'chirib bo'lmadi: %s — %s", dup_path, exc)
                 continue
             moved += 1
             source_path = infer_source_path(dup_path.name)

@@ -5,6 +5,8 @@ topadi."""
 
 from pathlib import Path
 
+import pytest
+
 from ufl.finalize.dedup import find_duplicate_groups, infer_source_path, quarantine_duplicates
 from ufl.store.db import BookRecord, Store
 
@@ -98,3 +100,30 @@ def test_quarantine_duplicates_skips_store_update_when_source_unrecognized(tmp_p
         moved = quarantine_duplicates(groups, rejected_dir=rejected_dir, store=store)
 
     assert moved == 1  # DB yozuvi topilmasa ham fayl baribir ko'chiriladi
+
+
+def test_quarantine_duplicates_succeeds_across_different_filesystems(tmp_path, monkeypatch):
+    """output/ va rejected/ turli Docker bind-mountlarda (masalan UFL-Datas vs
+    data/) bo'lganda os.rename EXDEV bilan xato beradi — shunday holatda ham
+    fayl ko'chirilishi kerak (nusxalab-o'chirish orqali)."""
+    output_dir = tmp_path / "output"
+    rejected_dir = tmp_path / "rejected"
+    kept = output_dir / "books" / "10763_kitob-a.txt"
+    dup = output_dir / "books" / "10764_kitob-a-copy.txt"
+    _write(kept, "Bir xil matn.")
+    _write(dup, "Bir xil matn.")
+
+    def _raise_exdev(self, target):
+        raise OSError(18, "Invalid cross-device link")  # errno.EXDEV
+
+    monkeypatch.setattr(Path, "replace", _raise_exdev)
+
+    with Store(tmp_path / "ufl.db") as store:
+        groups = find_duplicate_groups(output_dir)
+        moved = quarantine_duplicates(groups, rejected_dir=rejected_dir, store=store)
+
+    assert moved == 1
+    assert not dup.exists()
+    assert (rejected_dir / "duplicates" / "books" / "10764_kitob-a-copy.txt").read_text(
+        encoding="utf-8"
+    ) == "Bir xil matn."
