@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from typing import Iterator, Protocol
 
 from bs4 import BeautifulSoup
 
@@ -93,3 +94,50 @@ def _strip_tracking_params(parsed: urllib.parse.SplitResult) -> str:
     return urllib.parse.urlunsplit(
         (parsed.scheme, parsed.netloc, parsed.path, urllib.parse.urlencode(pairs), "")
     )
+
+
+class _WebGetter(Protocol):
+    def get(self, url: str) -> object:
+        ...  # .url: str, .text: str
+
+
+def walk_catalog(
+    web: _WebGetter,
+    *,
+    start_url: str = "https://ziyouz.com/kutubxona",
+    max_pages: int = 0,
+) -> Iterator[tuple[str, str, str, str]]:
+    """`/kutubxona`ni BFS bilan yuradi va har bir topilgan yuklab-olish elementini
+    `(item_id, slug, category_name, download_url)` sifatida yield qiladi.
+
+    `category_name` — element topilgan sahifaning `<h3>` sarlavhasi (None bo'lsa
+    "Noma'lum" qaytariladi, chaqiruvchi tomon buni ham tashlab yuborishi kerak).
+    Pagination sahifalari maxsus ishlov talab qilmaydi — ular ham oddiy
+    `/kutubxona/*` sahifa sifatida navbatga tushadi.
+    """
+    visited: set[str] = set()
+    queue: list[str] = [start_url]
+    pages_fetched = 0
+
+    while queue:
+        url = queue.pop(0)
+        if url in visited:
+            continue
+        visited.add(url)
+
+        if max_pages and pages_fetched >= max_pages:
+            return
+        response = web.get(url)
+        pages_fetched += 1
+
+        html = response.text  # type: ignore[attr-defined]
+        page_url = str(getattr(response, "url", url))
+        category_name = extract_category_name(html) or "Noma'lum"
+        sub_pages, items = discover_links(html, page_url)
+
+        for sub_page in sub_pages:
+            if sub_page not in visited:
+                queue.append(sub_page)
+
+        for item_id, slug, download_url in items:
+            yield item_id, slug, category_name, download_url
