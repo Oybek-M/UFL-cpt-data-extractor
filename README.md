@@ -24,6 +24,11 @@ Kitob va hujjatlardan (PDF, EPUB, DJVU, DOCX, FB2, TXT, HTML, copy-paste) **faqa
   tayyor dataset'larni (uz-books-v2, uz-crawl, uz-wiki) to'liq yuklab olmasdan,
   mavjud tozalash pipeline'i orqali o'tkazadi — davom ettiriladigan, ixtiyoriy
   `--stop-at-budget`
+- ✅ ziyouz.com Kutubxonasidan ommaviy yig'ish (`ufl fetch-ziyouz`): "Kutubxona"
+  bo'limidagi barcha kategoriyalarni (~13,000 fayl) avtomatik topib, PDF/EPUB/DOC/FB2
+  fayllarni mavjud tozalash pipeline'i orqali o'tkazadi (audio va mos kelmaydigan
+  formatlar avtomatik o'tkazib yuboriladi); davomiylik — allaqachon qayta ishlangan
+  elementlar qayta yuklab olinmaydi
 
 ## Tez boshlash (Docker)
 

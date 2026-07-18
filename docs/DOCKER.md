@@ -392,3 +392,39 @@ Har 1000 qator — bitta shard fayl: `<output>/<kategoriya>/<dataset-slug>__<spl
 mit, lekin tarkib Vikipediya matni (CC BY-SA) — foydalanishdan oldin o'z loyihangiz
 uchun litsenziya mosligini tekshiring (§6.5'dagi kabi umumiy eslatma shu yerga ham
 tegishli).
+
+---
+
+## 9. ziyouz.com Kutubxonasidan ommaviy yig'ish (fetch-ziyouz)
+
+"Kutubxona" bo'limidagi (~13,000 fayl, 42 kategoriya) barcha PDF/EPUB/DOC/FB2/DJVU/TXT
+faylni avtomatik topib, mavjud tozalash pipeline'i orqali o'tkazadi. Dizayn:
+[2026-07-18-ziyouz-bulk-downloader-design.md](superpowers/specs/2026-07-18-ziyouz-bulk-downloader-design.md).
+
+### 9.1 Ishlatish
+
+```bash
+# Butun kutubxonani yig'ish (uzluksiz, davomiy)
+docker compose run --rm ufl ufl fetch-ziyouz
+
+# Sinov uchun: 5 ta elementdan keyin to'xtaydi
+docker compose run --rm ufl ufl fetch-ziyouz --limit 5
+
+# Faqat bitta UFL kategoriyasi
+docker compose run --rm ufl ufl fetch-ziyouz --category books
+```
+
+### 9.2 Davomiylik va litsenziya
+
+Har bir element `ufl.db`da `ziyouz:<id>` kaliti bilan qayd etiladi — to'xtatib qayta
+ishga tushirilsa, allaqachon qayta ishlangan elementlar qayta yuklab olinmaydi.
+Kutubxona sahifalari (pagination) esa har safar qaytadan yuriladi (arzon — bir necha
+yuz sahifa), faqat qimmat qism (yuklab olish+qayta ishlash) qayta bajarilmaydi.
+
+Audio (mp3) va boshqa matn-bo'lmagan fayllar kengaytma bo'yicha avtomatik o'tkazib
+yuboriladi. Xaritada yo'q (yangi paydo bo'lgan) kategoriya nomi ogohlantirish bilan
+o'tkazib yuboriladi — `src/ufl/ziyouz/category_map.py`ga qo'shish mumkin.
+
+> **Litsenziya:** sayt "faqat shaxsiy mutolaa, tijoriy foydalanish taqiqlanadi" deydi —
+> hozirgi bosqich uchun (tijoriy bo'lmagan MVP tayyorgarlik) qabul qilingan qaror,
+> tijoriylashuvdan oldin qayta ko'rib chiqiladi (spec §"Litsenziya eslatmasi"ga qarang).
