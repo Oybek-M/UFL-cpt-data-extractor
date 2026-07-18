@@ -13,6 +13,7 @@ services:
     environment:
       - UFL_TOKENIZER_MODEL_ID=${UFL_TOKENIZER_MODEL_ID:-}
       - HF_TOKEN=${HF_TOKEN:-}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
     command: ["ufl", "version"]
 
   web:
@@ -27,4 +28,8 @@ services:
       - ./src:/app/src
     ports:
       - "127.0.0.1:8000:8000"
+    environment:
+      - UFL_TOKENIZER_MODEL_ID=${UFL_TOKENIZER_MODEL_ID:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
     command: ["uvicorn", "ufl.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
