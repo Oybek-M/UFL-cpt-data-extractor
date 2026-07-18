@@ -428,3 +428,38 @@ o'tkazib yuboriladi — `src/ufl/ziyouz/category_map.py`ga qo'shish mumkin.
 > **Litsenziya:** sayt "faqat shaxsiy mutolaa, tijoriy foydalanish taqiqlanadi" deydi —
 > hozirgi bosqich uchun (tijoriy bo'lmagan MVP tayyorgarlik) qabul qilingan qaror,
 > tijoriylashuvdan oldin qayta ko'rib chiqiladi (spec §"Litsenziya eslatmasi"ga qarang).
+
+## 10. Korpusni yakunlash (finalize-corpus)
+
+Yig'ilgan korpusni (`UFL-Datas`) jamoaning umumiy training bazasiga topshirishdan oldin
+ishga tushiriladi. Uch bosqich: global (korpus-bo'ylab) dedup, PII (email/telefon)
+tozalash, HF dataset manbasini fayl nomidan yashirish. Dizayn:
+[2026-07-18-finalize-corpus-design.md](superpowers/specs/2026-07-18-finalize-corpus-design.md).
+
+### 10.1 Ishlatish
+
+**Avval hisobot ko'rish uchun (hech narsa o'zgarmaydi):**
+
+```bash
+docker compose run --rm ufl ufl finalize-corpus
+```
+
+**Haqiqiy o'zgarish qilish uchun:**
+
+```bash
+docker compose run --rm ufl ufl finalize-corpus --apply
+```
+
+### 10.2 Bosqichlar va xavfsizlik
+
+Bosqich tartibi qat'iy: **dedup → PII → HF nomini yashirish**. Rename doim oxirida
+ishlaydi, chunki dedup va PII bosqichlari HF fayllarni asl (dataset_slug asosidagi)
+nomi orqali aniqlaydi.
+
+Dublikat fayllar **o'chirilmaydi** — `data/rejected/duplicates/{category}/`ga
+ko'chiriladi (repo ichida, gitignored, kerak bo'lsa qaytarib olish mumkin).
+
+Yangi HF dataset qo'shilganda (masalan yangi `tahrirchi/...` yoki boshqa manba), uni
+`src/ufl/finalize/hf_rename.py`dagi `DATASET_ALIAS` xaritasiga qo'shish kerak — aks holda
+o'sha dataset fayllari "Noma'lum dataset" deb ogohlantiriladi va qayta nomlanmaydi
+(xavfsizlik uchun — hech qachon taxminiy alias yaratilmaydi).
