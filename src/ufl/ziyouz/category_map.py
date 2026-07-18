@@ -162,7 +162,27 @@ CATEGORY_MAP: dict[str, str] = {
 }
 
 
+# ziyouz.com HTML'da qo'shtirnoq apostrof turli joyda turlicha kodlangan (ASCII '
+# yoki Unicode qayrilma ‘/’) — 2026-07-18 real crawl'da bu farq "O'zbek xalq
+# og'zaki ijodi" kabi nomlarni "Noma'lum kategoriya" deb noto'g'ri belgilagan.
+# Solishtirishdan oldin barcha variantlar bitta ASCII apostrofga normallashtiriladi.
+_APOSTROPHE_VARIANTS = ("‘", "’", "ʼ", "´", "`")
+
+
+def _normalize_category_name(name: str) -> str:
+    normalized = name.strip()
+    for variant in _APOSTROPHE_VARIANTS:
+        normalized = normalized.replace(variant, "'")
+    return normalized
+
+
+_NORMALIZED_CATEGORY_MAP: dict[str, str] = {
+    _normalize_category_name(name): category for name, category in CATEGORY_MAP.items()
+}
+
+
 def resolve_ufl_category(joomla_category_name: str) -> str | None:
     """Ziyouz kategoriya nomini UFL kategoriyasiga o'giradi; xaritada yo'q
-    bo'lsa None (chaqiruvchi tomon bunday elementni o'tkazib yuborishi kerak)."""
-    return CATEGORY_MAP.get(joomla_category_name.strip())
+    bo'lsa None (chaqiruvchi tomon bunday elementni o'tkazib yuborishi kerak).
+    Apostrof kodlash farqlariga chidamli (`_normalize_category_name`)."""
+    return _NORMALIZED_CATEGORY_MAP.get(_normalize_category_name(joomla_category_name))
