@@ -29,6 +29,9 @@ tokenizers==0.22.2
 sentencepiece==0.2.0
 huggingface-hub==1.24.0
 
+# --- HuggingFace dataset streaming (fetch-hf) ---
+datasets==5.0.0
+
 # --- Dedup ---
 datasketch==1.6.5
 
