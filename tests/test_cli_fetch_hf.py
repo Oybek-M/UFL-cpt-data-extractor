@@ -1,23 +1,36 @@
 from pathlib import Path
+from typing import Iterator
 
 from typer.testing import CliRunner
 
+import ufl.cli as cli_module
 from ufl.cli import app
 
 runner = CliRunner()
 
 _UZBEK_PARAGRAPH = "Бу китоб жуда қизиқарли бўлиб, унда кўплаб воқеалар тасвирланган."
+_REAL_SHARD_SIZE = cli_module.SHARD_SIZE  # fetch-hf'ning skip_rows hisobi shunga tayanadi
 
 
-class _FakeStream:
-    def __init__(self, rows):
-        self._rows = list(rows)
+def _fake_iter_shards(rows: list[dict]):
+    """`iter_shards`ga o'xshash soxta generator — CLI faqat shard-batching,
+    skip_rows va limit xatti-harakatiga qiziqadi, hf_dataset'ning ichki
+    parquet/HTTP mexanikasiga emas."""
 
-    def skip(self, n):
-        return _FakeStream(self._rows[n:])
+    def _fn(dataset_id: str, split: str, text_column: str, *, skip_rows: int = 0, limit: int = 0, **_kwargs) -> Iterator[list[str]]:
+        texts = [row[text_column] for row in rows][skip_rows:]
+        if limit:
+            texts = texts[:limit]
+        batch: list[str] = []
+        for text in texts:
+            batch.append(text)
+            if len(batch) >= _REAL_SHARD_SIZE:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
-    def __iter__(self):
-        return iter(self._rows)
+    return _fn
 
 
 def _write_test_config(tmp_path: Path, books_budget: int = 1000) -> Path:
@@ -77,10 +90,9 @@ near_dup_enabled = false
 
 def test_fetch_hf_processes_dataset_and_writes_shard_output(tmp_path, monkeypatch):
     config_path = _write_test_config(tmp_path)
-    import ufl.ingest.hf_dataset as hf_dataset
 
     rows = [{"text": _UZBEK_PARAGRAPH} for _ in range(3)]
-    monkeypatch.setattr(hf_dataset, "load_dataset", lambda *a, **k: _FakeStream(rows))
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
 
     result = runner.invoke(
         app,
@@ -96,9 +108,8 @@ def test_fetch_hf_processes_dataset_and_writes_shard_output(tmp_path, monkeypatc
 
 def test_fetch_hf_rejects_invalid_category(tmp_path, monkeypatch):
     config_path = _write_test_config(tmp_path)
-    import ufl.ingest.hf_dataset as hf_dataset
 
-    monkeypatch.setattr(hf_dataset, "load_dataset", lambda *a, **k: _FakeStream([]))
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards([]))
 
     result = runner.invoke(
         app,
@@ -111,11 +122,10 @@ def test_fetch_hf_rejects_invalid_category(tmp_path, monkeypatch):
 
 def test_fetch_hf_records_resumable_progress(tmp_path, monkeypatch):
     config_path = _write_test_config(tmp_path)
-    import ufl.ingest.hf_dataset as hf_dataset
     from ufl.store.hf_state import HFFetchState
 
     rows = [{"text": _UZBEK_PARAGRAPH}]
-    monkeypatch.setattr(hf_dataset, "load_dataset", lambda *a, **k: _FakeStream(rows))
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
 
     result = runner.invoke(
         app,
@@ -131,10 +141,9 @@ def test_fetch_hf_records_resumable_progress(tmp_path, monkeypatch):
 
 def test_fetch_hf_respects_limit_option(tmp_path, monkeypatch):
     config_path = _write_test_config(tmp_path)
-    import ufl.ingest.hf_dataset as hf_dataset
 
     rows = [{"text": _UZBEK_PARAGRAPH + f" nashr-{i}."} for i in range(5)]
-    monkeypatch.setattr(hf_dataset, "load_dataset", lambda *a, **k: _FakeStream(rows))
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
 
     result = runner.invoke(
         app,
@@ -152,10 +161,9 @@ def test_fetch_hf_respects_limit_option(tmp_path, monkeypatch):
 
 def test_fetch_hf_stops_at_budget_when_flag_set(tmp_path, monkeypatch):
     config_path = _write_test_config(tmp_path, books_budget=50)
-    import ufl.ingest.hf_dataset as hf_dataset
 
     rows = [{"text": _UZBEK_PARAGRAPH + f" nashr-{i}."} for i in range(1001)]
-    monkeypatch.setattr(hf_dataset, "load_dataset", lambda *a, **k: _FakeStream(rows))
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
 
     result = runner.invoke(
         app,
@@ -170,10 +178,9 @@ def test_fetch_hf_stops_at_budget_when_flag_set(tmp_path, monkeypatch):
 
 def test_fetch_hf_without_flag_ignores_budget_and_processes_all_shards(tmp_path, monkeypatch):
     config_path = _write_test_config(tmp_path, books_budget=50)
-    import ufl.ingest.hf_dataset as hf_dataset
 
     rows = [{"text": _UZBEK_PARAGRAPH + f" nashr-{i}."} for i in range(1001)]
-    monkeypatch.setattr(hf_dataset, "load_dataset", lambda *a, **k: _FakeStream(rows))
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
 
     result = runner.invoke(
         app,

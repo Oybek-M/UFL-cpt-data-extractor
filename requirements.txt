@@ -30,7 +30,13 @@ sentencepiece==0.2.0
 huggingface-hub==1.24.0
 
 # --- HuggingFace dataset streaming (fetch-hf) ---
+# `datasets`ning streaming+Xet (hf_xet) yo'li ba'zi datasetlarda (masalan
+# tahrirchi/uz-books-v2) abadiy osilib qolgani tasdiqlangan (2026-07-18) —
+# `iter_shards` endi HfApi + oddiy HTTP + pyarrow orqali to'g'ridan-to'g'ri
+# ishlaydi, `datasets` paketi endi ishlatilmaydi (kelajakda olib tashlanishi
+# mumkin, hozircha zarar qilmaydi).
 datasets==5.0.0
+pyarrow==25.0.0
 
 # --- Dedup ---
 datasketch==1.6.5
