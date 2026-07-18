@@ -14,6 +14,10 @@ from typing import Iterator, Protocol
 
 from bs4 import BeautifulSoup
 
+from ufl.logging_setup import get_logger
+
+logger = get_logger(__name__)
+
 # `download`ning qiymati "id:slug" formatida — buni parse_qs bilan (regex bilan
 # emas) o'qiymiz, chunki bitta-parametrli query'da ("?download=...") qiymatdan
 # oldin '?' yoki '&' belgisi YO'Q — `[?&]download=` uslubidagi regex bunday
@@ -127,7 +131,11 @@ def walk_catalog(
 
         if max_pages and pages_fetched >= max_pages:
             return
-        response = web.get(url)
+        try:
+            response = web.get(url)
+        except Exception as exc:  # noqa: BLE001 — bitta (vaqtincha) sahifani izolyatsiya qilish
+            logger.warning("Sahifa yuklab bo'lmadi, o'tkazib yuborilmoqda: %s — %s", url, exc)
+            continue
         pages_fetched += 1
 
         html = response.text  # type: ignore[attr-defined]

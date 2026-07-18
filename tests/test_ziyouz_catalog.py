@@ -140,3 +140,37 @@ def test_walk_catalog_respects_max_pages():
     list(walk_catalog(web, start_url="https://ziyouz.com/kutubxona", max_pages=2))
 
     assert len(web.requested) == 2
+
+
+class _FlakyWeb:
+    """Sinov uchun: ba'zi url'lar uchun (masalan ziyouz.com'ning vaqtinchalik
+    522 xatosi kabi) xato ko'taradigan soxta WebClient."""
+
+    def __init__(self, pages: dict[str, str], fail_urls: set[str]) -> None:
+        self._pages = pages
+        self._fail_urls = fail_urls
+        self.requested: list[str] = []
+
+    def get(self, url: str) -> _FakeResponse:
+        self.requested.append(url)
+        if url in self._fail_urls:
+            raise RuntimeError("522 Server error (simulyatsiya)")
+        return _FakeResponse(url, self._pages[url])
+
+
+def test_walk_catalog_skips_page_on_transient_error_and_continues():
+    """Bitta sahifa vaqtincha yuklanmasa (masalan ziyouz.com 522 bersa), butun
+    crawl to'xtab qolmasligi kerak — o'sha sahifa o'tkazib yuborilib, davom etadi."""
+    web = _FlakyWeb(
+        {
+            "https://ziyouz.com/kutubxona": _ROOT_HTML,
+            "https://ziyouz.com/kutubxona/category/7-a": _CAT_A_PAGE1,
+            "https://ziyouz.com/kutubxona/category/7-a?start=100": _CAT_A_PAGE2,
+        },
+        fail_urls={"https://ziyouz.com/kutubxona/category/7-a?start=100"},
+    )
+
+    found = list(walk_catalog(web, start_url="https://ziyouz.com/kutubxona"))
+
+    item_ids = sorted(item_id for item_id, _slug, _category, _url in found)
+    assert item_ids == ["10"]  # faqat 1-sahifadagi kitob; 2-sahifa xato bergani uchun o'tkazib yuborilgan
