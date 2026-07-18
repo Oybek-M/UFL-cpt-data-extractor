@@ -30,6 +30,8 @@ from ufl.stats.budget import compute_budget, total_budget
 from ufl.stats.tokens import load_tokenizer_counter
 from ufl.store.db import BookRecord, Store
 from ufl.store.hf_state import HFFetchState
+from ufl.ziyouz.catalog import walk_catalog
+from ufl.ziyouz.category_map import resolve_ufl_category
 
 app = typer.Typer(name="ufl", help="Uzbek CPT data pipeline — kitoblardan toza matn ajratib olish.")
 console = Console()
@@ -513,6 +515,147 @@ def fetch_hf(
     console.print(
         f"\n[bold green]Tugadi.[/bold green] {ok_shards} shard qayta ishlandi "
         f"({processed_rows:,} qator, {kept_total:,} saqlandi)."
+    )
+
+
+ZIYOUZ_SUPPORTED_EXTENSIONS = {".pdf", ".epub", ".docx", ".doc", ".fb2", ".djvu", ".txt", ".html"}
+ZIYOUZ_MAX_FILE_BYTES = 200 * 1024 * 1024
+
+
+@app.command("fetch-ziyouz")
+def fetch_ziyouz(
+    category: str = typer.Option(
+        None, "--category", help="Faqat shu UFL kategoriyasidagi elementlarni yuklash (bo'sh — hammasi)"
+    ),
+    limit: int = typer.Option(0, "--limit", help="Shuncha elementdan keyin to'xtash (0 — cheklovsiz)"),
+    config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
+) -> None:
+    """ziyouz.com "Kutubxona" bo'limidan ommaviy fayl yuklab, UFL pipeline'idan o'tkazish."""
+    setup_logging()
+    if category is not None and category not in CRAWL_CATEGORIES:
+        console.print(
+            f"[bold red]Xato:[/bold red] noto'g'ri kategoriya '{category}'. "
+            f"Ruxsat etilgan: {', '.join(CRAWL_CATEGORIES)}."
+        )
+        raise typer.Exit(code=1)
+
+    config = Config.load(config_path)
+    web = _build_web_client(config)
+    fasttext_predict = load_fasttext_predictor(config.language.fasttext_model_path)
+    exact_token_counter = load_tokenizer_counter(config.tokenizer.local_dir, config.tokenizer.model_id)
+    quality_kwargs = {
+        "min_chars": config.quality.min_chars,
+        "min_words": config.quality.min_words,
+        "max_non_letter_ratio": config.quality.max_non_letter_ratio,
+        "max_repeated_ngram_ratio": config.quality.max_repeated_ngram_ratio,
+        "max_upper_ratio": config.quality.max_upper_ratio,
+        "max_url_ratio": config.quality.max_url_ratio,
+    }
+    dedup_store = DeduplicationStore()
+    tmp_dir = config.paths.db.parent / "tmp_ziyouz"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    ok_count = 0
+    skip_count = 0
+    error_count = 0
+    unmapped_categories: set[str] = set()
+
+    try:
+        with Store(config.paths.db) as store:
+            for item_id, slug, joomla_category, download_url in walk_catalog(web):
+                if limit and ok_count >= limit:
+                    break
+
+                source_key = f"ziyouz:{item_id}"
+                if store.is_processed(source_key):
+                    skip_count += 1
+                    continue
+
+                ufl_category = resolve_ufl_category(joomla_category)
+                if ufl_category is None:
+                    if joomla_category not in unmapped_categories:
+                        unmapped_categories.add(joomla_category)
+                        console.print(
+                            f"[yellow]Noma'lum kategoriya:[/yellow] '{joomla_category}' — "
+                            "o'tkazib yuborilmoqda (category_map.py ga qo'shish mumkin)."
+                        )
+                    skip_count += 1
+                    continue
+                if category is not None and ufl_category != category:
+                    skip_count += 1
+                    continue
+
+                try:
+                    response = web.get(download_url)
+                except Exception as exc:  # noqa: BLE001 — bitta faylni izolyatsiya qilish
+                    error_count += 1
+                    console.print(f"[red]Yuklab olishda xato:[/red] {download_url} — {exc}")
+                    continue
+
+                final_url = str(getattr(response, "url", download_url))
+                extension = Path(final_url.split("?")[0]).suffix.lower()
+                if extension not in ZIYOUZ_SUPPORTED_EXTENSIONS:
+                    skip_count += 1
+                    continue
+                if len(response.content) > ZIYOUZ_MAX_FILE_BYTES:
+                    skip_count += 1
+                    continue
+
+                tmp_path = tmp_dir / f"{item_id}_{slug}{extension}"
+                tmp_path.write_bytes(response.content)
+                try:
+                    result = process_file(
+                        tmp_path,
+                        category=ufl_category,
+                        dedup_store=dedup_store,
+                        fasttext_predict=fasttext_predict,
+                        exact_token_counter=exact_token_counter,
+                        chars_per_token=config.tokenizer.chars_per_token,
+                        header_footer_min_repeats=config.structure.header_footer_min_repeats,
+                        detect_toc=config.structure.detect_toc,
+                        detect_bibliography=config.structure.detect_bibliography,
+                        min_language_confidence=config.language.min_confidence,
+                        min_heuristic_score=config.language.min_heuristic_score,
+                        apostrophe_mode=config.normalize.apostrophe_mode,
+                        quality_kwargs=quality_kwargs,
+                    )
+                    write_output(
+                        result,
+                        output_dir=config.paths.output,
+                        rejected_dir=config.paths.rejected,
+                        reports_dir=config.paths.reports,
+                    )
+                    dropped_pct = (
+                        len(result.dropped) / result.total_blocks * 100 if result.total_blocks else 0.0
+                    )
+                    store.record_book(
+                        BookRecord(
+                            path=source_key,
+                            category=ufl_category,
+                            format=result.format,
+                            char_count=result.char_count,
+                            estimated_tokens=result.estimated_tokens,
+                            exact_tokens=result.exact_tokens,
+                            total_blocks=result.total_blocks,
+                            kept_blocks=result.kept_blocks,
+                            dropped_pct=round(dropped_pct, 2),
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001 — bitta faylni izolyatsiya qilish
+                    error_count += 1
+                    console.print(f"[red]Qayta ishlashda xato:[/red] {download_url} — {exc}")
+                    continue
+                finally:
+                    tmp_path.unlink(missing_ok=True)
+
+                ok_count += 1
+                console.print(f"[green]OK[/green] {ufl_category}: {joomla_category} — {item_id}")
+    finally:
+        web.close()
+
+    console.print(
+        f"\n[bold green]Tugadi.[/bold green] Muvaffaqiyatli: {ok_count}, "
+        f"O'tkazib yuborildi: {skip_count}, Xato: {error_count}."
     )
 
 
