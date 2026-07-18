@@ -32,6 +32,8 @@ access_token*
 
 # === Databases ===
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
