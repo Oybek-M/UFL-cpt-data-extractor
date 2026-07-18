@@ -351,3 +351,44 @@ Muhim qoidalar:
 - Xato/kalit yo'qligi/tarmoq muammosi bo'lsa — **hech narsa qo'shimcha tashlanmaydi**
   (fail-open): evristika natijasi o'zgarishsiz qoladi, dastur hech qachon buzilmaydi.
 - Bayroqsiz (standart) `ufl run` MiniMax'ga umuman murojaat qilmaydi.
+
+---
+
+## 8. HuggingFace dataset'lardan yig'ish (`fetch-hf`)
+
+Ba'zi o'zbekcha matn dataset'lari HuggingFace'da allaqachon millionlab qator sifatida
+tayyor turibdi (masalan `tahrirchi/uz-books-v2`, `tahrirchi/uz-crawl`, `yakhyo/uz-wiki`).
+Bularni qo'lda yuklab olish/o'qish o'rniga, `ufl fetch-hf` streaming rejimda (diskka
+to'liq nusxa saqlamasdan) qator-baqator o'qib, mavjud til/sifat/dedup pipeline'idan
+o'tkazadi.
+
+### 8.1 Foydalanish
+
+```bash
+docker compose run --rm ufl ufl fetch-hf tahrirchi/uz-books-v2 --split lat --category books
+docker compose run --rm ufl ufl fetch-hf tahrirchi/uz-crawl --split news --category web_news
+docker compose run --rm ufl ufl fetch-hf tahrirchi/uz-crawl --split telegram_blogs --category web_news
+docker compose run --rm ufl ufl fetch-hf yakhyo/uz-wiki --split train --category reference
+```
+
+- `--limit N` — sinov uchun, faqat N qator (masalan `--limit 100`).
+- `--stop-at-budget` — kategoriya budjet-maqsadiga yetgach avtomatik to'xtaydi.
+  **Standart: o'chiq** — bayroqsiz dataset oxirigacha (yoki manba tugaguncha) ishlanadi,
+  hatto budjetdan oshib ketsa ham (to'xtash-to'xtamaslik qarori foydalanuvchida).
+
+### 8.2 Davom ettirish
+
+Har `dataset-id + split` uchun progress alohida saqlanadi (`data/hf_state/`). Buyruq
+uzilib qolsa (tarmoq, vaqt), qayta ishga tushirilganda oxirgi tugallangan shard'dan
+davom etadi — boshidan boshlamaydi.
+
+### 8.3 Chiqish
+
+Har 1000 qator — bitta shard fayl: `<output>/<kategoriya>/<dataset-slug>__<split>__shard-NNNNNN.txt`.
+
+### 8.4 Litsenziya eslatmasi
+
+`tahrirchi/*` dataset'lari apache-2.0/mit litsenziyali. `yakhyo/uz-wiki` paketlanishi
+mit, lekin tarkib Vikipediya matni (CC BY-SA) — foydalanishdan oldin o'z loyihangiz
+uchun litsenziya mosligini tekshiring (§6.5'dagi kabi umumiy eslatma shu yerga ham
+tegishli).

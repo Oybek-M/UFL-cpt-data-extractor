@@ -20,6 +20,10 @@ Kitob va hujjatlardan (PDF, EPUB, DJVU, DOCX, FB2, TXT, HTML, copy-paste) **faqa
 - ✅ Fayllardan (eBook/hujjat) extract: tekis papkaga tashlangan fayllar avtonom, mustaqil
   qayta ishlanadi (kategoriya avto-aniqlanadi); ixtiyoriy `--verify-with-minimax` — faqat
   shubhali bloklarni bitta so'rovda tekshiradi, matnni hech qachon tahrirlamaydi
+- ✅ HuggingFace dataset'lardan streaming yig'ish (`ufl fetch-hf`): millionlab qatorli
+  tayyor dataset'larni (uz-books-v2, uz-crawl, uz-wiki) to'liq yuklab olmasdan,
+  mavjud tozalash pipeline'i orqali o'tkazadi — davom ettiriladigan, ixtiyoriy
+  `--stop-at-budget`
 
 ## Tez boshlash (Docker)
 
