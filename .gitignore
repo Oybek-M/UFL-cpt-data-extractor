@@ -21,6 +21,7 @@ access_token*
 /data/rejected/**
 /data/reports/**
 /data/collected/**
+/data/tmp_ziyouz/**
 !/data/input/.gitkeep
 !/data/output/.gitkeep
 !/data/rejected/.gitkeep
