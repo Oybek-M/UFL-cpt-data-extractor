@@ -1,0 +1,13 @@
+# docker-compose.override.yml.example
+#
+# Lokal-only konfiguratsiya namunasi. Nusxalab `docker-compose.override.yml` deb
+# saqlang va o'z "toza-data ombori" yo'lingizni yozing. Bu fayl .gitignore'da —
+# hech qachon git'ga tushmaydi, VPS'ga ham umuman ta'sir qilmaydi (VPS'da bu fayl
+# yo'q, shuning uchun oddiy data/output/ bilan davom etadi).
+services:
+  ufl:
+    volumes:
+      - "../UFL-Datas:/app/data/output"
+  web:
+    volumes:
+      - "../UFL-Datas:/app/data/output"
