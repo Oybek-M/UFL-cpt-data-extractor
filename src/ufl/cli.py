@@ -22,6 +22,9 @@ from ufl.crawl.state import CrawlState
 from ufl.crawl.urls import domain_folder, prepare_url
 from ufl.crawl.web_client import RobotsPolicy, WebClient
 from ufl.crawl.writer import BundledWriter
+from ufl.finalize.dedup import find_duplicate_groups, quarantine_duplicates
+from ufl.finalize.hf_rename import match_hf_shard_filename, renamed_filename
+from ufl.finalize.pii import scrub_pii
 from ufl.hf_pipeline import process_hf_shard
 from ufl.ingest.hf_dataset import SHARD_SIZE, dataset_slug, iter_shards
 from ufl.logging_setup import setup_logging
@@ -657,6 +660,87 @@ def fetch_ziyouz(
         f"\n[bold green]Tugadi.[/bold green] Muvaffaqiyatli: {ok_count}, "
         f"O'tkazib yuborildi: {skip_count}, Xato: {error_count}."
     )
+
+
+@app.command("finalize-corpus")
+def finalize_corpus(
+    apply: bool = typer.Option(
+        False, "--apply", help="Haqiqiy o'zgarish qilish (standart: faqat hisobot, dry-run)"
+    ),
+    config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
+) -> None:
+    """Yig'ilgan korpusni jamoaga topshirishdan oldin tayyorlaydi: global dedup,
+    PII tozalash, HF dataset manbasini fayl nomidan yashirish.
+
+    Bosqich tartibi muhim: dedup va PII HF fayllarni asl (dataset_slug asosidagi)
+    nomi bilan aniqlaydi, shuning uchun rename doim OXIRIDA ishlaydi."""
+    setup_logging()
+    config = Config.load(config_path)
+    output_dir = config.paths.output
+    rejected_dir = config.paths.rejected
+
+    with Store(config.paths.db) as store:
+        # 1. Global dedup
+        groups = find_duplicate_groups(output_dir)
+        dup_file_count = sum(len(g.duplicates) for g in groups)
+        console.print(
+            f"[bold]Dedup:[/bold] {len(groups)} guruh, {dup_file_count} dublikat fayl topildi."
+        )
+        if apply and groups:
+            moved = quarantine_duplicates(groups, rejected_dir=rejected_dir, store=store)
+            console.print(f"  -> {moved} fayl {rejected_dir}/duplicates/ ga ko'chirildi.")
+
+        # 2. PII tozalash
+        pii_files = 0
+        pii_hits = 0
+        for txt_path in output_dir.glob("*/*.txt"):
+            try:
+                text = txt_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
+                continue
+            cleaned, count = scrub_pii(text)
+            if count:
+                pii_files += 1
+                pii_hits += count
+                if apply:
+                    try:
+                        txt_path.write_text(cleaned, encoding="utf-8")
+                    except OSError as exc:
+                        console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
+        console.print(f"[bold]PII:[/bold] {pii_hits} ta topildi ({pii_files} faylda).")
+
+        # 3. HF nomini yashirish (doim OXIRGI bosqich)
+        renamed = 0
+        unknown_datasets: set[str] = set()
+        for txt_path in output_dir.glob("*/*.txt"):
+            match = match_hf_shard_filename(txt_path.name)
+            if match is None:
+                continue
+            if match.dataset_id is None:
+                unknown_datasets.add(match.slug)
+                continue
+            new_name = renamed_filename(txt_path.name)
+            if new_name is None:
+                continue
+            if apply:
+                try:
+                    txt_path.replace(txt_path.parent / new_name)
+                except OSError as exc:
+                    console.print(f"[red]Qayta nomlab bo'lmadi:[/red] {txt_path} — {exc}")
+                    continue
+            renamed += 1
+        console.print(f"[bold]HF nomini yashirish:[/bold] {renamed} fayl qayta nomlan{'di' if apply else 'adi'}.")
+        for slug in sorted(unknown_datasets):
+            console.print(
+                f"[yellow]Noma'lum dataset:[/yellow] '{slug}' — hf_rename.py DATASET_ALIAS'ga qo'shing."
+            )
+
+    if not apply:
+        console.print(
+            "\n[yellow]Bu dry-run edi — hech narsa o'zgartirilmadi. "
+            "--apply bilan qayta ishga tushiring.[/yellow]"
+        )
 
 
 @app.command(name="crawl-status")
