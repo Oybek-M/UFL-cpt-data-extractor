@@ -17,14 +17,23 @@ def _fake_iter_shards(rows: list[dict]):
     skip_rows va limit xatti-harakatiga qiziqadi, hf_dataset'ning ichki
     parquet/HTTP mexanikasiga emas."""
 
-    def _fn(dataset_id: str, split: str, text_column: str, *, skip_rows: int = 0, limit: int = 0, **_kwargs) -> Iterator[list[str]]:
+    def _fn(
+        dataset_id: str,
+        split: str,
+        text_column: str,
+        *,
+        skip_rows: int = 0,
+        limit: int = 0,
+        shard_size: int = _REAL_SHARD_SIZE,
+        **_kwargs,
+    ) -> Iterator[list[str]]:
         texts = [row[text_column] for row in rows][skip_rows:]
         if limit:
             texts = texts[:limit]
         batch: list[str] = []
         for text in texts:
             batch.append(text)
-            if len(batch) >= _REAL_SHARD_SIZE:
+            if len(batch) >= shard_size:
                 yield batch
                 batch = []
         if batch:
@@ -191,3 +200,88 @@ def test_fetch_hf_without_flag_ignores_budget_and_processes_all_shards(tmp_path,
     assert result.exit_code == 0, result.output
     output_files = list((tmp_path / "output" / "books").glob("*.txt"))
     assert len(output_files) == 2  # ikkala shard ham ishlandi (1000 + 1 qator), budjet e'tiborsiz
+
+
+def test_fetch_hf_shard_size_option_uses_custom_size_and_persists(tmp_path, monkeypatch):
+    """--shard-size birinchi marta berilsa, shu o'lcham ishlatilishi va
+    keyingi resume'lar uchun HFFetchState'ga saqlanishi kerak."""
+    config_path = _write_test_config(tmp_path)
+    from ufl.store.hf_state import HFFetchState
+
+    rows = [{"text": _UZBEK_PARAGRAPH + f" nashr-{i}."} for i in range(5)]
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
+
+    result = runner.invoke(
+        app,
+        ["fetch-hf", "test/dataset", "--split", "train", "--category", "books",
+         "--shard-size", "2", "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    output_files = list((tmp_path / "output" / "books").glob("*.txt"))
+    assert len(output_files) == 3  # 5 qator, shard=2 -> [2,2,1]
+
+    state_file = tmp_path / "hf_state" / "test_dataset__train.sqlite3"
+    with HFFetchState(state_file) as state:
+        assert state.get_shard_size("test/dataset::train") == 2
+        assert state.get_last_shard("test/dataset::train") == 3
+
+
+def test_fetch_hf_resume_reuses_stored_shard_size_without_flag(tmp_path, monkeypatch):
+    """Avvalgi ishga tushirishda saqlangan shard_size, --shard-size berilmasa
+    ham, global standart (1000) o'rniga qayta ishlatilishi kerak."""
+    config_path = _write_test_config(tmp_path)
+    from ufl.store.hf_state import HFFetchState
+
+    state_file = tmp_path / "hf_state" / "test_dataset__train.sqlite3"
+    key = "test/dataset::train"
+    with HFFetchState(state_file) as state:
+        state.set_shard_size(key, 2)
+        state.set_last_shard(key, 1)  # 1-shard (2 qator) allaqachon tugallangan
+
+    rows = [{"text": _UZBEK_PARAGRAPH + f" nashr-{i}."} for i in range(5)]
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
+
+    result = runner.invoke(
+        app,
+        ["fetch-hf", "test/dataset", "--split", "train", "--category", "books",
+         "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    output_files = list((tmp_path / "output" / "books").glob("*.txt"))
+    assert len(output_files) == 2  # qolgan 3 qator, shard=2 -> [2,1]
+    combined = "\n".join(f.read_text(encoding="utf-8") for f in output_files)
+    assert "nashr-0" not in combined  # birinchi 2 qator (skip_rows=2) o'tkazib yuborilgan
+    assert "nashr-1" not in combined
+
+    with HFFetchState(state_file) as state:
+        assert state.get_last_shard(key) == 3
+
+
+def test_fetch_hf_conflicting_shard_size_on_resume_errors(tmp_path, monkeypatch):
+    """Saqlangan shard_size'ga zid --shard-size berilsa, resumability'ni
+    buzmaslik uchun xato bilan to'xtashi kerak."""
+    config_path = _write_test_config(tmp_path)
+    from ufl.store.hf_state import HFFetchState
+
+    state_file = tmp_path / "hf_state" / "test_dataset__train.sqlite3"
+    key = "test/dataset::train"
+    with HFFetchState(state_file) as state:
+        state.set_shard_size(key, 2)
+        state.set_last_shard(key, 1)
+
+    rows = [{"text": _UZBEK_PARAGRAPH + f" nashr-{i}."} for i in range(5)]
+    monkeypatch.setattr(cli_module, "iter_shards", _fake_iter_shards(rows))
+
+    result = runner.invoke(
+        app,
+        ["fetch-hf", "test/dataset", "--split", "train", "--category", "books",
+         "--shard-size", "5", "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 1
+    output_files = list((tmp_path / "output" / "books").glob("*.txt"))
+    assert len(output_files) == 0
+    with HFFetchState(state_file) as state:
+        assert state.get_last_shard(key) == 1  # o'zgarmagan

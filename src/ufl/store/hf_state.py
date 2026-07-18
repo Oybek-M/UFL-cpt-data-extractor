@@ -18,7 +18,15 @@ class HFFetchState:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._path))
         self._conn.execute(_SCHEMA)
+        self._migrate_schema()
         self._conn.commit()
+
+    def _migrate_schema(self) -> None:
+        """Eski (production) hf_state fayllari shard_size ustunisiz yaratilgan —
+        buzmasdan qo'shib qo'yamiz (masalan tahrirchi/uz-crawl progressi)."""
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(progress)")}
+        if "shard_size" not in columns:
+            self._conn.execute("ALTER TABLE progress ADD COLUMN shard_size INTEGER")
 
     def close(self) -> None:
         self._conn.close()
@@ -38,5 +46,17 @@ class HFFetchState:
             "INSERT INTO progress(key,last_shard) VALUES(?,?) "
             "ON CONFLICT(key) DO UPDATE SET last_shard=excluded.last_shard",
             (key, shard_index),
+        )
+        self._conn.commit()
+
+    def get_shard_size(self, key: str) -> int | None:
+        row = self._conn.execute("SELECT shard_size FROM progress WHERE key=?", (key,)).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def set_shard_size(self, key: str, shard_size: int) -> None:
+        self._conn.execute(
+            "INSERT INTO progress(key, last_shard, shard_size) VALUES(?, 0, ?) "
+            "ON CONFLICT(key) DO UPDATE SET shard_size=excluded.shard_size",
+            (key, shard_size),
         )
         self._conn.commit()

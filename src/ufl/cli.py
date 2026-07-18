@@ -417,6 +417,10 @@ def fetch_hf(
         False, "--stop-at-budget",
         help="Kategoriya budjet-maqsadiga yetgach avtomatik to'xtash (standart: o'chiq — dataset oxirigacha ishlanadi)",
     ),
+    shard_size: int = typer.Option(
+        0, "--shard-size",
+        help="Har shardning qator soni (0 — global standart yoki bu dataset+split uchun saqlangan qiymat)",
+    ),
     config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
 ) -> None:
     """HuggingFace dataset'dan qator-baqator (streaming) toza matn yig'ish."""
@@ -445,13 +449,31 @@ def fetch_hf(
 
     with HFFetchState(state_path) as state, Store(config.paths.db) as store:
         key = f"{dataset_id}::{split}"
+        stored_shard_size = state.get_shard_size(key)
+        if stored_shard_size is not None:
+            if shard_size and shard_size != stored_shard_size:
+                console.print(
+                    f"[bold red]Xato:[/bold red] '{key}' uchun avval --shard-size "
+                    f"{stored_shard_size} bilan progress saqlangan, lekin {shard_size} berildi. "
+                    f"Resumability'ni buzmaslik uchun --shard-size {stored_shard_size} ishlating "
+                    "yoki uni butunlay tashlab qo'ying."
+                )
+                raise typer.Exit(code=1)
+            effective_shard_size = stored_shard_size
+        else:
+            effective_shard_size = shard_size or SHARD_SIZE
+            state.set_shard_size(key, effective_shard_size)
+
         shard_index = state.get_last_shard(key)
-        skip_rows = shard_index * SHARD_SIZE
+        skip_rows = shard_index * effective_shard_size
         ok_shards = 0
         processed_rows = 0
         kept_total = 0
 
-        for texts in iter_shards(dataset_id, split, text_column, skip_rows=skip_rows, limit=limit):
+        for texts in iter_shards(
+            dataset_id, split, text_column,
+            shard_size=effective_shard_size, skip_rows=skip_rows, limit=limit,
+        ):
             shard_index += 1
             shard_label = f"{slug}__{split}__shard-{shard_index:06d}"
             result = process_hf_shard(

@@ -375,6 +375,14 @@ docker compose run --rm ufl ufl fetch-hf yakhyo/uz-wiki --split train --category
 - `--stop-at-budget` — kategoriya budjet-maqsadiga yetgach avtomatik to'xtaydi.
   **Standart: o'chiq** — bayroqsiz dataset oxirigacha (yoki manba tugaguncha) ishlanadi,
   hatto budjetdan oshib ketsa ham (to'xtash-to'xtamaslik qarori foydalanuvchida).
+- `--shard-size N` — har shardning qator soni (standart: 1000). Har bir qator "bitta
+  blok" sifatida (paragraflarga bo'linmasdan) fastText+transliteratsiya+sifat
+  pipeline'idan o'tadi — shuning uchun bitta qatori butun kitob bo'lgan dataset'larda
+  (masalan `tahrirchi/uz-books-v2`) 1000 ni juda katta, kichikroq qiymat (masalan `20`)
+  qo'yish tavsiya etiladi (kam qatorli, ko'p-hujjatli dataset'larda esa standart yetarli):
+  ```bash
+  docker compose run --rm ufl ufl fetch-hf tahrirchi/uz-books-v2 --split lat --category books --shard-size 20
+  ```
 
 ### 8.2 Davom ettirish
 
@@ -382,9 +390,16 @@ Har `dataset-id + split` uchun progress alohida saqlanadi (`data/hf_state/`). Bu
 uzilib qolsa (tarmoq, vaqt), qayta ishga tushirilganda oxirgi tugallangan shard'dan
 davom etadi — boshidan boshlamaydi.
 
+`--shard-size` shu progress fayliga ham yoziladi: birinchi ishga tushirishda berilgan
+qiymat saqlanadi va keyingi qayta ishga tushirishlarda (bayroqsiz ham) avtomatik
+qayta ishlatiladi — `skip_rows` hisobini buzmaslik uchun. Saqlangan qiymatga zid
+`--shard-size` berilsa, buyruq xato bilan to'xtaydi (avval saqlangan qiymatni
+ishlatish yoki bayroqni butunlay tashlab qo'yish kerak).
+
 ### 8.3 Chiqish
 
-Har 1000 qator — bitta shard fayl: `<output>/<kategoriya>/<dataset-slug>__<split>__shard-NNNNNN.txt`.
+Har shard (standart 1000 qator, yoki `--shard-size` bilan belgilangan qator soni) —
+bitta shard fayl: `<output>/<kategoriya>/<dataset-slug>__<split>__shard-NNNNNN.txt`.
 
 ### 8.4 Litsenziya eslatmasi
 
