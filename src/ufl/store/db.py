@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS books (
     total_blocks INTEGER NOT NULL DEFAULT 0,
     kept_blocks INTEGER NOT NULL DEFAULT 0,
     dropped_pct REAL NOT NULL DEFAULT 0.0,
-    processed_at TEXT NOT NULL
+    processed_at TEXT NOT NULL,
+    dedup_status TEXT
 );
 """
 
@@ -49,7 +50,15 @@ class Store:
         self._conn = sqlite3.connect(str(self._db_path), timeout=30.0)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_SCHEMA)
+        self._migrate_schema()
         self._conn.commit()
+
+    def _migrate_schema(self) -> None:
+        """Eski (production) ufl.db fayllari dedup_status ustunisiz yaratilgan —
+        buzmasdan qo'shib qo'yamiz."""
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(books)")}
+        if "dedup_status" not in columns:
+            self._conn.execute("ALTER TABLE books ADD COLUMN dedup_status TEXT")
 
     def close(self) -> None:
         self._conn.close()
@@ -93,9 +102,16 @@ class Store:
         )
         self._conn.commit()
 
+    def mark_duplicate(self, path: str) -> None:
+        self._conn.execute(
+            "UPDATE books SET dedup_status = 'duplicate' WHERE path = ?", (path,)
+        )
+        self._conn.commit()
+
     def collected_tokens_by_category(self) -> dict[str, int]:
         cur = self._conn.execute(
-            "SELECT category, SUM(COALESCE(exact_tokens, estimated_tokens)) FROM books GROUP BY category"
+            "SELECT category, SUM(COALESCE(exact_tokens, estimated_tokens)) FROM books "
+            "WHERE dedup_status IS NULL GROUP BY category"
         )
         return {category: total or 0 for category, total in cur.fetchall()}
 
