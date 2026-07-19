@@ -15,6 +15,7 @@ from ufl import __version__
 from ufl.cleanup import cleanup_logs
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
+from ufl.clean.quality import strip_garbage_tokens
 from ufl.config import Config
 from ufl.crawl.collector import Collector
 from ufl.crawl.minimax import InMemoryMetaState, MiniMaxClient
@@ -692,10 +693,13 @@ def finalize_corpus(
     config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
 ) -> None:
     """Yig'ilgan korpusni jamoaga topshirishdan oldin tayyorlaydi: global dedup,
-    PII tozalash, HF dataset manbasini fayl nomidan yashirish.
+    PII tozalash, HF dataset manbasini fayl nomidan yashirish, OCR-chiqindi
+    tokenlarni tozalash.
 
     Bosqich tartibi muhim: dedup va PII HF fayllarni asl (dataset_slug asosidagi)
-    nomi bilan aniqlaydi, shuning uchun rename doim OXIRIDA ishlaydi."""
+    nomi bilan aniqlaydi, shuning uchun rename doim OXIRIDA (3-bosqich) ishlaydi.
+    OCR-chiqindi tozalash (4-bosqich) fayl nomiga bog'liq emas, shuning uchun
+    rename'dan keyin yoki oldin ishlashi farqi yo'q — soddalik uchun oxirida."""
     setup_logging()
     config = Config.load(config_path)
     output_dir = config.paths.output
@@ -757,6 +761,31 @@ def finalize_corpus(
             console.print(
                 f"[yellow]Noma'lum dataset:[/yellow] '{slug}' — hf_rename.py DATASET_ALIAS'ga qo'shing."
             )
+
+        # 4. OCR-chiqindi tokenlarni tozalash (qator darajasida)
+        denoise_files = 0
+        denoise_lines = 0
+        for txt_path in output_dir.glob("*/*.txt"):
+            try:
+                text = txt_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
+                continue
+            lines = text.split("\n")
+            cleaned_lines = [strip_garbage_tokens(line) for line in lines]
+            changed_count = sum(1 for old, new in zip(lines, cleaned_lines) if old != new)
+            if changed_count:
+                denoise_files += 1
+                denoise_lines += changed_count
+                if apply:
+                    try:
+                        txt_path.write_text("\n".join(cleaned_lines), encoding="utf-8")
+                    except OSError as exc:
+                        console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
+        console.print(
+            f"[bold]OCR-chiqindi tozalash:[/bold] {denoise_lines} qatordan chiqindi token "
+            f"olib tashlan{'di' if apply else 'adi'} ({denoise_files} faylda)."
+        )
 
     if not apply:
         console.print(

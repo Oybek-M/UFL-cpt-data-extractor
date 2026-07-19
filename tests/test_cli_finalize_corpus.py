@@ -131,3 +131,32 @@ def test_apply_warns_on_unknown_hf_dataset(tmp_path):
 
     assert result.exit_code == 0
     assert "boshqa_dataset" in result.output
+
+
+def test_apply_strips_ocr_garbage_tokens(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    garbage_file = output_dir / "web_news" / "3_c.txt"
+    _write(garbage_file, "Yaxshi gap bu yerda.\n• kayta nshlaga1^ K r k -^.\n")
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    cleaned_text = garbage_file.read_text(encoding="utf-8")
+    assert "nshlaga1" not in cleaned_text
+    assert "•" not in cleaned_text
+    assert "kayta" in cleaned_text
+    assert "Yaxshi gap bu yerda." in cleaned_text
+
+
+def test_dry_run_does_not_modify_ocr_garbage(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    garbage_file = output_dir / "web_news" / "3_c.txt"
+    original = "Yaxshi gap bu yerda.\n• kayta nshlaga1^ K r k -^.\n"
+    _write(garbage_file, original)
+
+    result = runner.invoke(app, ["finalize-corpus", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    assert garbage_file.read_text(encoding="utf-8") == original
