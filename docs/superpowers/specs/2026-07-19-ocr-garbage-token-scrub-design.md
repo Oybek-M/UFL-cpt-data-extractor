@@ -62,10 +62,16 @@ Har bir qator bo'shliq bo'yicha tokenlarga bo'linadi (allaqachon `to_latin()` or
 transliteratsiya qilingan matn ustida ishlaydi). Har token quyidagi qoidalardan **birortasiga**
 mos kelsa, **butunlay olib tashlanadi**:
 
-1. **Notinish-belgi/ramz** — token tarkibida harf/raqam/apostrof/defisdan boshqa belgi bo'lsa
-   (masalan `•`, `^`) — token olib tashlanadi.
-   - Regex: token harf(`\p{L}`)/raqam(`\p{N}`)/apostrof(`'`)/defis(`-`)dan tashqari belgi
-     o'z ichiga olsa.
+1. **G'ayrioddiy ramz** — token tarkibida harf/raqam/apostrof/defisdan va **odatiy tinish
+   belgilaridan** (`. , ! ? : ; ( ) " « » – — …`) boshqa belgi bo'lsa (masalan `•`, `^`) — token
+   olib tashlanadi. **Muhim tuzatish** (dastlabki loyihada xato bor edi): agar faqat
+   harf/raqam/apostrof/defisga ruxsat berilsa-yu, oddiy tinish belgilari (nuqta, vergul)
+   ruxsat etilmagan deb hisoblansa, deyarli **har bir gap oxiridagi so'z** (masalan "kerak.")
+   chiqindi deb noto'g'ri hisoblanadi — bu esa korpusning katta qismini yo'qotib qo'yadi.
+   Shuning uchun ruxsat etilgan belgilar to'plamiga standart tinish belgilari ham kiritildi;
+   faqat haqiqatan g'ayrioddiy ramzlar (`•`, `^` va shunga o'xshash) chiqindi hisoblanadi.
+   - `_ALLOWED_EXTRA_CHARS = set("'-.,!?:;()\"«»–—…")` (harf/raqamdan tashqari ruxsat etilgan
+     belgilar to'plami).
 2. **Izolyatsiyalangan yakka harf** — token uzunligi 1 ta belgi bo'lsa (masalan yolg'iz `K`,
    `r`, `k`) — olib tashlanadi. Bu **ro'yxatga asoslanmagan, blanket qoida**: zamonaviy o'zbek
    yozma tilida yakka harf mustaqil so'z sifatida deyarli hech qachon uchramaydi.
