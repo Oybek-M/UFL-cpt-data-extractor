@@ -447,10 +447,12 @@ o'tkazib yuboriladi — `src/ufl/ziyouz/category_map.py`ga qo'shish mumkin.
 ## 10. Korpusni yakunlash (finalize-corpus)
 
 Yig'ilgan korpusni (`UFL-Datas`) jamoaning umumiy training bazasiga topshirishdan oldin
-ishga tushiriladi. To'rt bosqich: global (korpus-bo'ylab) dedup, PII (email/telefon)
-tozalash, HF dataset manbasini fayl nomidan yashirish, OCR-chiqindi tokenlarni tozalash.
+ishga tushiriladi. Besh bosqich: global (korpus-bo'ylab) dedup, PII (email/telefon)
+tozalash, HF dataset manbasini fayl nomidan yashirish, OCR-chiqindi tokenlarni tozalash,
+OCR-manba imlo xatolarini tuzatish.
 Dizayn: [2026-07-18-finalize-corpus-design.md](superpowers/specs/2026-07-18-finalize-corpus-design.md),
-[2026-07-19-ocr-garbage-token-scrub-design.md](superpowers/specs/2026-07-19-ocr-garbage-token-scrub-design.md).
+[2026-07-19-ocr-garbage-token-scrub-design.md](superpowers/specs/2026-07-19-ocr-garbage-token-scrub-design.md),
+[2026-07-19-ocr-spellcheck-design.md](superpowers/specs/2026-07-19-ocr-spellcheck-design.md).
 
 ### 10.1 Ishlatish
 
@@ -466,12 +468,22 @@ docker compose run --rm ufl ufl finalize-corpus
 docker compose run --rm ufl ufl finalize-corpus --apply
 ```
 
+**MiniMax bilan birga (ixtiyoriy, qoldiq imlo-xatolarini ham tekshirish uchun):**
+
+```bash
+docker compose run --rm ufl ufl finalize-corpus --apply --use-minimax
+```
+
+(`MINIMAX_API_KEY` muhit o'zgaruvchisi kerak. Standart holatda o'chiq — faqat
+qoidaga asoslangan tuzatish yetarli bo'lmagan qoldiq so'zlar uchun, har bir noyob
+so'z faqat bir marta so'raladi, xarajatni tejash uchun.)
+
 ### 10.2 Bosqichlar va xavfsizlik
 
-Bosqich tartibi qat'iy: **dedup → PII → HF nomini yashirish → OCR-chiqindi tozalash**.
-Rename dedup/PII'dan keyin ishlaydi, chunki ular HF fayllarni asl (dataset_slug asosidagi)
-nomi orqali aniqlaydi. OCR-chiqindi tozalash fayl nomiga bog'liq emas (faqat kontentga
-ishlaydi), shuning uchun oxirida turadi.
+Bosqich tartibi qat'iy: **dedup → PII → HF nomini yashirish → OCR-chiqindi tozalash →
+imlo tuzatish**. Rename dedup/PII'dan keyin ishlaydi, chunki ular HF fayllarni asl
+(dataset_slug asosidagi) nomi orqali aniqlaydi. OCR-chiqindi tozalash va imlo tuzatish
+fayl nomiga bog'liq emas (faqat kontentga ishlaydi), shuning uchun oxirida turadi.
 
 **OCR-chiqindi tozalash** (`strip_garbage_tokens`) — ziyouz/ziyonet'dan OCR orqali olingan
 fayllarda uchraydigan qator ichidagi alohida chiqindi tokenlarni (g'ayrioddiy ramz,
@@ -479,6 +491,14 @@ izolyatsiyalangan yakka harf, raqam-harf yopishish) olib tashlaydi, butun qatorn
 tashlamasdan. **Bilingan cheklov**: "so'zga o'xshab qolgan, lekin noto'g'ri harfli"
 chiqindi (masalan `ertaklashvj`, `xapk`) bu usul bilan tutilmaydi — lug'at yoki til
 modeli talab qiladi, hozircha qamrovdan tashqarida.
+
+**OCR-manba imlo tuzatish** (`spellcheck.py`) — "kayta" kabi shaklan to'g'ri, lekin
+harfiy OCR-xatosi bo'lgan so'zlarni tuzatadi. Ishonchli lug'at **faqat HF-manba
+fayllardan** quriladi (web-crawl va ziyouz — ikkalasida ham ekstraksiya/OCR muammosi
+bo'lishi mumkin, shuning uchun lug'atga qo'shilmaydi). Tekshirish/tuzatish esa **HF-manba
+bo'lmagan barcha fayllarga** qo'llanadi. Faqat 5 ta ma'lum chalkashlik juftligi
+(`q↔k`, `g'↔g`, `h↔x`, `o'↔u`, `i↔y`) bo'yicha **yagona nomzod** topilsagina
+to'g'irlanadi — noaniq holatlarda so'zga tegilmaydi.
 
 Dublikat fayllar **o'chirilmaydi** — `data/rejected/duplicates/{category}/`ga
 ko'chiriladi (repo ichida, gitignored, kerak bo'lsa qaytarib olish mumkin).
