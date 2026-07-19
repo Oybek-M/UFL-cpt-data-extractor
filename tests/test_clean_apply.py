@@ -59,3 +59,12 @@ def test_clean_paragraphs_supports_custom_get_text_and_on_drop():
     )
     assert len(kept) == 1
     assert drops and drops[0][1] == "til_ozbekcha_emas"
+
+
+def test_clean_paragraphs_strips_ocr_garbage_but_keeps_paragraph():
+    text = _UZBEK + "\n• kayta nshlaga1^ K r k -^."
+    kept = _clean([text])
+    assert len(kept) == 1
+    assert "nshlaga1" not in kept[0]
+    assert "•" not in kept[0]
+    assert "kayta" in kept[0].lower()

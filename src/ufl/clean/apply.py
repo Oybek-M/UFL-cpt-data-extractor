@@ -11,7 +11,7 @@ from typing import Callable, Iterable, TypeVar
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import FastTextPredictor, is_uzbek
 from ufl.clean.normalize import normalize
-from ufl.clean.quality import assess
+from ufl.clean.quality import assess, strip_garbage_tokens
 from ufl.clean.transliterate import to_latin
 
 T = TypeVar("T")
@@ -40,6 +40,7 @@ def clean_paragraphs(
     for item in items:
         raw = get_text(item)
         latin = to_latin(raw)
+        latin = "\n".join(strip_garbage_tokens(line) for line in latin.split("\n"))
 
         if not is_uzbek(
             latin,
