@@ -132,13 +132,16 @@ def test_query_minimax_corrections_parses_response():
 
 def test_query_minimax_corrections_batches_large_word_lists():
     call_log = []
+    sleeps = []
 
     def fake_post(url, headers, json_body, timeout):
         call_log.append(json_body)
         return _FakeResponse(200, _minimax_body({}))
 
     words = [f"word{i}" for i in range(5)]
-    _, calls = query_minimax_corrections(words, api_key="fake-key", post=fake_post, batch_size=2)
+    _, calls = query_minimax_corrections(
+        words, api_key="fake-key", post=fake_post, batch_size=2, sleep=sleeps.append
+    )
 
     assert calls == 3  # 5 so'z, batch_size=2 -> 3 so'rov (2+2+1)
 
@@ -147,18 +150,72 @@ def test_query_minimax_corrections_returns_empty_on_network_error():
     def fake_post(url, headers, json_body, timeout):
         raise ConnectionError("network down")
 
-    corrections, calls = query_minimax_corrections(["gubla"], api_key="fake-key", post=fake_post)
+    corrections, calls = query_minimax_corrections(
+        ["gubla"], api_key="fake-key", post=fake_post, sleep=lambda s: None
+    )
     assert corrections == {}
-    assert calls == 1  # urinish qilindi, lekin xato bo'ldi
+    assert calls == 1  # urinish qilindi, lekin xato bo'ldi (tarmoq xatosida qayta urinilmaydi)
 
 
 def test_query_minimax_corrections_returns_empty_on_bad_status():
     def fake_post(url, headers, json_body, timeout):
         return _FakeResponse(401, {})
 
-    corrections, calls = query_minimax_corrections(["gubla"], api_key="fake-key", post=fake_post)
+    corrections, calls = query_minimax_corrections(
+        ["gubla"], api_key="fake-key", post=fake_post, sleep=lambda s: None
+    )
     assert corrections == {}
-    assert calls == 1
+    assert calls == 1  # 401 avtorizatsiya xatosi - qayta urinilmaydi (bloklangan)
+
+
+def test_query_minimax_corrections_retries_on_429_then_succeeds():
+    responses = [_FakeResponse(429, {}), _FakeResponse(200, _minimax_body({"gubla": "gulla"}))]
+    sleeps = []
+
+    def fake_post(url, headers, json_body, timeout):
+        return responses.pop(0)
+
+    corrections, calls = query_minimax_corrections(
+        ["gubla"], api_key="fake-key", post=fake_post, sleep=sleeps.append
+    )
+
+    assert corrections == {"gubla": "gulla"}
+    assert calls == 2  # birinchi urinish 429, ikkinchisi muvaffaqiyatli
+    assert len(sleeps) == 1  # 429dan keyin backoff kutildi
+
+
+def test_query_minimax_corrections_gives_up_after_max_retries_on_429():
+    sleeps = []
+
+    def fake_post(url, headers, json_body, timeout):
+        return _FakeResponse(429, {})
+
+    corrections, calls = query_minimax_corrections(
+        ["gubla"], api_key="fake-key", post=fake_post, sleep=sleeps.append, max_retry_attempts=3
+    )
+
+    assert corrections == {}
+    assert calls == 3  # max_retry_attempts marta urinildi, keyin voz kechildi
+    assert len(sleeps) == 2  # urinishlar orasida 2 marta kutildi (3-urinishdan keyin kutish yo'q)
+
+
+def test_query_minimax_corrections_paces_between_batches():
+    sleeps = []
+
+    def fake_post(url, headers, json_body, timeout):
+        return _FakeResponse(200, _minimax_body({}))
+
+    words = [f"word{i}" for i in range(4)]
+    query_minimax_corrections(
+        words,
+        api_key="fake-key",
+        post=fake_post,
+        batch_size=2,
+        sleep=sleeps.append,
+        request_delay_seconds=5.0,
+    )
+
+    assert sleeps == [5.0]  # 2 partiya - ular orasida bitta kutish (birinchidan oldin yo'q)
 
 
 def test_apply_known_corrections_replaces_matching_words():

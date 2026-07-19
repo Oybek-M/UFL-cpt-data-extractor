@@ -8,6 +8,7 @@ Manba: docs/superpowers/specs/2026-07-19-ocr-spellcheck-design.md
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -133,22 +134,32 @@ def query_minimax_corrections(
     api_key: str,
     model: str = DEFAULT_MINIMAX_MODEL,
     url: str = DEFAULT_MINIMAX_URL,
-    batch_size: int = 200,
+    batch_size: int = 100,
     post: Any = None,
+    request_delay_seconds: float = 2.0,
+    max_retry_attempts: int = 5,
+    sleep: Callable[[float], None] | None = None,
 ) -> tuple[dict[str, str], int]:
     """Qoidaga asoslangan usul hal qila olmagan noyob so'zlarni MiniMax'ga yuboradi.
 
     Qaytaradi: ({asl_so'z: tuzatilgan_so'z} lug'ati, yuborilgan so'rovlar soni).
     Kalitsiz, bo'sh ro'yxat, tarmoq xatosi yoki javobni tahlil qilib bo'lmasa —
-    bo'sh lug'at (xavfsiz standart, so'z tuzatilmagan holda qoladi)."""
+    bo'sh lug'at (xavfsiz standart, so'z tuzatilmagan holda qoladi).
+
+    429/5xx (rate limit) javobida — eksponensial backoff bilan `max_retry_attempts`
+    martagacha qayta uriniladi (401/403 yoki tarmoq xatosida qayta urinilmaydi).
+    Partiyalar orasida `request_delay_seconds` kutiladi — MiniMax'ning daqiqalik
+    limitiga bir yo'la zarba bermaslik uchun."""
     if not words or not api_key:
         return {}, 0
     post_fn = post or _default_post
+    sleep_fn = sleep or time.sleep
     corrections: dict[str, str] = {}
     call_count = 0
-    for start in range(0, len(words), batch_size):
+    for batch_index, start in enumerate(range(0, len(words), batch_size)):
         chunk = words[start : start + batch_size]
-        call_count += 1
+        if batch_index > 0:
+            sleep_fn(request_delay_seconds)
         request_body = {
             "model": model,
             "messages": [
@@ -176,30 +187,39 @@ def query_minimax_corrections(
                 },
             ],
             "stream": False,
-            "max_completion_tokens": 2000,
+            "max_completion_tokens": 4000,
             "temperature": 0.1,
         }
-        try:
-            response = post_fn(
-                url,
-                {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                request_body,
-                60.0,
+        for attempt in range(max_retry_attempts):
+            call_count += 1
+            try:
+                response = post_fn(
+                    url,
+                    {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    request_body,
+                    60.0,
+                )
+            except Exception:  # noqa: BLE001 — tarmoq xatosi: qayta urinilmaydi, so'z tuzatilmagan qoladi
+                break
+            if response.status_code == 429 or response.status_code >= 500:
+                if attempt < max_retry_attempts - 1:
+                    backoff = min(60.0, request_delay_seconds * (2**attempt))
+                    sleep_fn(backoff)
+                    continue
+                break
+            if response.status_code != 200:
+                break
+            try:
+                body = response.json()
+                content = body["choices"][0]["message"]["content"]
+                decision = _first_json_object(content)
+                chunk_corrections = decision.get("corrections", {})
+            except Exception:  # noqa: BLE001
+                break
+            corrections.update(
+                {word: fix for word, fix in chunk_corrections.items() if isinstance(fix, str) and fix}
             )
-        except Exception:  # noqa: BLE001 — tarmoq xatosi: so'z tuzatilmagan qoladi
-            continue
-        if response.status_code != 200:
-            continue
-        try:
-            body = response.json()
-            content = body["choices"][0]["message"]["content"]
-            decision = _first_json_object(content)
-            chunk_corrections = decision.get("corrections", {})
-        except Exception:  # noqa: BLE001
-            continue
-        corrections.update(
-            {word: fix for word, fix in chunk_corrections.items() if isinstance(fix, str) and fix}
-        )
+            break
     return corrections, call_count
 
 
