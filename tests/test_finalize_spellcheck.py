@@ -19,7 +19,10 @@ def _write(path: Path, text: str) -> None:
 
 def test_build_trusted_dictionary_only_uses_hf_sourced_files(tmp_path):
     output_dir = tmp_path / "output"
-    _write(output_dir / "web_news" / "corpus-a__news__shard-000001.txt", "qayta ishlash kerak.")
+    _write(
+        output_dir / "web_news" / "corpus-a__news__shard-000001.txt",
+        "qayta ishlash kerak. qayta va qayta yana qayta.",
+    )
     _write(output_dir / "web_news" / "10763_kimdir.txt", "kayta ishlash kerak edi.")
 
     trusted = build_trusted_dictionary(output_dir)
@@ -28,9 +31,42 @@ def test_build_trusted_dictionary_only_uses_hf_sourced_files(tmp_path):
     assert "kayta" not in trusted  # ziyouz-manba, lug'atga qo'shilmaydi
 
 
+def test_build_trusted_dictionary_excludes_words_below_frequency_threshold(tmp_path):
+    output_dir = tmp_path / "output"
+    _write(
+        output_dir / "web_news" / "corpus-a__news__shard-000001.txt",
+        "ko'prox shovqin so'zi. Boshqa so'zlar qayta qayta qayta uchraydi.",
+    )
+
+    trusted = build_trusted_dictionary(output_dir)
+
+    # "ko'prox" haqiqiy korpusda topilgan HF-manbadagi bir martalik OCR-shovqin
+    # misoli — real ishga tushirishda bunday kamdan-kam so'zlar boshqa to'g'ri
+    # so'zlarni noto'g'ri "tuzatishga" olib kelgan edi (masalan "tura-" ->
+    # "to'ra-"). Standart chastota chegarasi (>=3) bunday so'zlarni chetlab
+    # o'tishi kerak.
+    assert "ko'prox" not in trusted
+    assert "shovqin" not in trusted  # faqat 1 marta uchraydi
+    assert "qayta" in trusted  # 3 marta uchraydi - chegaradan o'tadi
+
+
+def test_build_trusted_dictionary_respects_custom_min_frequency(tmp_path):
+    output_dir = tmp_path / "output"
+    _write(output_dir / "web_news" / "corpus-a__news__shard-000001.txt", "yolgiz so'z.")
+
+    trusted_default = build_trusted_dictionary(output_dir)
+    trusted_lenient = build_trusted_dictionary(output_dir, min_frequency=1)
+
+    assert "yolgiz" not in trusted_default
+    assert "yolgiz" in trusted_lenient
+
+
 def test_build_trusted_dictionary_lowercases_and_strips_trailing_punct(tmp_path):
     output_dir = tmp_path / "output"
-    _write(output_dir / "reference" / "corpus-c__train__shard-000001.txt", "Kitob, juda qiziq!")
+    _write(
+        output_dir / "reference" / "corpus-c__train__shard-000001.txt",
+        "Kitob, juda qiziq! Kitob va yana kitob, qiziq qiziq.",
+    )
 
     trusted = build_trusted_dictionary(output_dir)
 

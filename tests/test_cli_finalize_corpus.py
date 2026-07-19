@@ -166,7 +166,10 @@ def test_dry_run_does_not_modify_ocr_garbage(tmp_path):
 def test_apply_corrects_known_ocr_confusion(tmp_path):
     config_path = _write_test_config(tmp_path)
     output_dir = tmp_path / "output"
-    _write(output_dir / "web_news" / "corpus-a__news__shard-000001.txt", "qayta ishlash kerak.\n")
+    _write(
+        output_dir / "web_news" / "corpus-a__news__shard-000001.txt",
+        "qayta ishlash kerak. Yana qayta qildik. Qayta va qayta.\n",
+    )
     ziyouz_file = output_dir / "web_news" / "10763_kimdir.txt"
     _write(ziyouz_file, "Bu kayta ishlash kerak edi.\n")
 

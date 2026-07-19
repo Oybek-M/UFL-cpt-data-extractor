@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -57,10 +58,20 @@ def _split_trailing_punct(token: str) -> tuple[str, str]:
     return token[:end], token[end:]
 
 
-def build_trusted_dictionary(output_dir: Path) -> set[str]:
-    """HF-manba fayllardagi barcha (kichik harfli, tinish-belgisiz) so'zlarni
-    to'playdi. Ziyouz va boshqa web-manba fayllar hisobga olinmaydi."""
-    trusted: set[str] = set()
+DEFAULT_MIN_TRUSTED_FREQUENCY = 3
+
+
+def build_trusted_dictionary(output_dir: Path, *, min_frequency: int = DEFAULT_MIN_TRUSTED_FREQUENCY) -> set[str]:
+    """HF-manba fayllardagi so'zlarni (kichik harfli, tinish-belgisiz) chastotasi
+    bo'yicha to'playdi. Faqat kamida `min_frequency` marta uchragan so'z ishonchli
+    hisoblanadi. Ziyouz va boshqa web-manba fayllar hisobga olinmaydi.
+
+    Chastota chegarasi kerak, chunki HF-manba ma'lumotining o'zida ham kamdan-kam
+    OCR/ekstraksiya shovqini bo'lishi mumkin (real korpusda topilgan misol:
+    "ko'prox" HF-manbada bir marta uchragan xato so'z bo'lib, uni tekshirmasdan
+    ishonchli deb hisoblash to'g'ri so'zlarni (masalan "tura-") noto'g'ri
+    "tuzatishga" olib kelgan edi)."""
+    counts: Counter[str] = Counter()
     for txt_path in sorted(Path(output_dir).glob("*/*.txt")):
         if not is_hf_sourced_filename(txt_path.name):
             continue
@@ -72,8 +83,8 @@ def build_trusted_dictionary(output_dir: Path) -> set[str]:
             for token in line.split():
                 core, _ = _split_trailing_punct(token.lower())
                 if core:
-                    trusted.add(core)
-    return trusted
+                    counts[core] += 1
+    return {word for word, count in counts.items() if count >= min_frequency}
 
 
 def find_correction(word: str, trusted: set[str]) -> str | None:
