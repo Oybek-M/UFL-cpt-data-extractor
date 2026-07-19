@@ -16,7 +16,7 @@ from ufl.cleanup import cleanup_logs
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.clean.quality import strip_garbage_tokens
-from ufl.clean.structure import is_page_number_line
+from ufl.clean.structure import is_byline_label_line, is_page_number_line
 from ufl.config import Config
 from ufl.crawl.collector import Collector
 from ufl.crawl.minimax import InMemoryMetaState, MiniMaxClient
@@ -701,6 +701,17 @@ def finalize_corpus(
         False, "--use-minimax",
         help="Qoidaga asoslangan usul hal qila olmagan so'zlar uchun MiniMax'dan ham foydalanish (standart: o'chiq, xarajat uchun)",
     ),
+    run_dedup: bool = typer.Option(True, "--dedup/--no-dedup", help="1-bosqich: global dedup"),
+    run_pii: bool = typer.Option(True, "--pii/--no-pii", help="2-bosqich: PII tozalash"),
+    run_hf_rename: bool = typer.Option(
+        True, "--hf-rename/--no-hf-rename", help="3-bosqich: HF dataset manbasini fayl nomidan yashirish"
+    ),
+    run_denoise: bool = typer.Option(
+        True, "--denoise/--no-denoise", help="4-bosqich: OCR-chiqindi token va qoldiq sahifa raqami tozalash"
+    ),
+    run_spellcheck: bool = typer.Option(
+        True, "--spellcheck/--no-spellcheck", help="5-bosqich: OCR-manba imlo tuzatish"
+    ),
     config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
 ) -> None:
     """Yig'ilgan korpusni jamoaga topshirishdan oldin tayyorlaydi: global dedup,
@@ -710,7 +721,12 @@ def finalize_corpus(
     Bosqich tartibi muhim: dedup va PII HF fayllarni asl (dataset_slug asosidagi)
     nomi bilan aniqlaydi, shuning uchun rename doim OXIRIDA (3-bosqich) ishlaydi.
     OCR-chiqindi tozalash (4-bosqich) fayl nomiga bog'liq emas, shuning uchun
-    rename'dan keyin yoki oldin ishlashi farqi yo'q — soddalik uchun oxirida."""
+    rename'dan keyin yoki oldin ishlashi farqi yo'q — soddalik uchun oxirida.
+
+    Har bir bosqich `--no-<bosqich>` bayrog'i bilan alohida o'chirilishi mumkin
+    (masalan `--no-dedup --no-pii --no-hf-rename --no-denoise` — faqat imlo
+    tuzatish ishlaydi). Yangi ma'lumot qo'shilganda faqat kerakli bosqich(lar)ni
+    qayta ishga tushirish uchun foydalidir."""
     setup_logging()
     config = Config.load(config_path)
     output_dir = config.paths.output
@@ -718,89 +734,113 @@ def finalize_corpus(
 
     with Store(config.paths.db) as store:
         # 1. Global dedup
-        groups = find_duplicate_groups(output_dir)
-        dup_file_count = sum(len(g.duplicates) for g in groups)
-        console.print(
-            f"[bold]Dedup:[/bold] {len(groups)} guruh, {dup_file_count} dublikat fayl topildi."
-        )
-        if apply and groups:
-            moved = quarantine_duplicates(groups, rejected_dir=rejected_dir, store=store)
-            console.print(f"  -> {moved} fayl {rejected_dir}/duplicates/ ga ko'chirildi.")
+        if run_dedup:
+            groups = find_duplicate_groups(output_dir)
+            dup_file_count = sum(len(g.duplicates) for g in groups)
+            console.print(
+                f"[bold]Dedup:[/bold] {len(groups)} guruh, {dup_file_count} dublikat fayl topildi."
+            )
+            if apply and groups:
+                moved = quarantine_duplicates(groups, rejected_dir=rejected_dir, store=store)
+                console.print(f"  -> {moved} fayl {rejected_dir}/duplicates/ ga ko'chirildi.")
+        else:
+            console.print("[dim]1-bosqich (dedup) o'tkazib yuborildi (--no-dedup).[/dim]")
 
         # 2. PII tozalash
-        pii_files = 0
-        pii_hits = 0
-        for txt_path in output_dir.glob("*/*.txt"):
-            try:
-                text = txt_path.read_text(encoding="utf-8")
-            except OSError as exc:
-                console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
-                continue
-            cleaned, count = scrub_pii(text)
-            if count:
-                pii_files += 1
-                pii_hits += count
-                if apply:
-                    try:
-                        txt_path.write_text(cleaned, encoding="utf-8")
-                    except OSError as exc:
-                        console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
-        console.print(f"[bold]PII:[/bold] {pii_hits} ta topildi ({pii_files} faylda).")
+        if run_pii:
+            pii_files = 0
+            pii_hits = 0
+            for txt_path in output_dir.glob("*/*.txt"):
+                try:
+                    text = txt_path.read_text(encoding="utf-8")
+                except OSError as exc:
+                    console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
+                    continue
+                cleaned, count = scrub_pii(text)
+                if count:
+                    pii_files += 1
+                    pii_hits += count
+                    if apply:
+                        try:
+                            txt_path.write_text(cleaned, encoding="utf-8")
+                        except OSError as exc:
+                            console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
+            console.print(f"[bold]PII:[/bold] {pii_hits} ta topildi ({pii_files} faylda).")
+        else:
+            console.print("[dim]2-bosqich (PII) o'tkazib yuborildi (--no-pii).[/dim]")
 
         # 3. HF nomini yashirish (doim OXIRGI bosqich)
-        renamed = 0
-        unknown_datasets: set[str] = set()
-        for txt_path in output_dir.glob("*/*.txt"):
-            match = match_hf_shard_filename(txt_path.name)
-            if match is None:
-                continue
-            if match.dataset_id is None:
-                unknown_datasets.add(match.slug)
-                continue
-            new_name = renamed_filename(txt_path.name)
-            if new_name is None:
-                continue
-            if apply:
-                try:
-                    txt_path.replace(txt_path.parent / new_name)
-                except OSError as exc:
-                    console.print(f"[red]Qayta nomlab bo'lmadi:[/red] {txt_path} — {exc}")
+        if run_hf_rename:
+            renamed = 0
+            unknown_datasets: set[str] = set()
+            for txt_path in output_dir.glob("*/*.txt"):
+                match = match_hf_shard_filename(txt_path.name)
+                if match is None:
                     continue
-            renamed += 1
-        console.print(f"[bold]HF nomini yashirish:[/bold] {renamed} fayl qayta nomlan{'di' if apply else 'adi'}.")
-        for slug in sorted(unknown_datasets):
-            console.print(
-                f"[yellow]Noma'lum dataset:[/yellow] '{slug}' — hf_rename.py DATASET_ALIAS'ga qo'shing."
-            )
-
-        # 4. OCR-chiqindi tokenlarni tozalash (qator darajasida)
-        denoise_files = 0
-        denoise_lines = 0
-        for txt_path in output_dir.glob("*/*.txt"):
-            try:
-                text = txt_path.read_text(encoding="utf-8")
-            except OSError as exc:
-                console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
-                continue
-            lines = text.split("\n")
-            cleaned_lines = [
-                "" if is_page_number_line(line) else strip_garbage_tokens(line) for line in lines
-            ]
-            changed_count = sum(1 for old, new in zip(lines, cleaned_lines) if old != new)
-            if changed_count:
-                denoise_files += 1
-                denoise_lines += changed_count
+                if match.dataset_id is None:
+                    unknown_datasets.add(match.slug)
+                    continue
+                new_name = renamed_filename(txt_path.name)
+                if new_name is None:
+                    continue
                 if apply:
                     try:
-                        txt_path.write_text("\n".join(cleaned_lines), encoding="utf-8")
+                        txt_path.replace(txt_path.parent / new_name)
                     except OSError as exc:
-                        console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
-        console.print(
-            f"[bold]OCR-chiqindi tozalash:[/bold] {denoise_lines} qatordan chiqindi token/"
-            f"qoldiq sahifa raqami olib tashlan{'di' if apply else 'adi'} ({denoise_files} faylda)."
-        )
+                        console.print(f"[red]Qayta nomlab bo'lmadi:[/red] {txt_path} — {exc}")
+                        continue
+                renamed += 1
+            console.print(f"[bold]HF nomini yashirish:[/bold] {renamed} fayl qayta nomlan{'di' if apply else 'adi'}.")
+            for slug in sorted(unknown_datasets):
+                console.print(
+                    f"[yellow]Noma'lum dataset:[/yellow] '{slug}' — hf_rename.py DATASET_ALIAS'ga qo'shing."
+                )
+        else:
+            console.print("[dim]3-bosqich (HF nomini yashirish) o'tkazib yuborildi (--no-hf-rename).[/dim]")
+
+        # 4. OCR-chiqindi tokenlarni tozalash (qator darajasida)
+        if run_denoise:
+            denoise_files = 0
+            denoise_lines = 0
+            for txt_path in output_dir.glob("*/*.txt"):
+                try:
+                    text = txt_path.read_text(encoding="utf-8")
+                except OSError as exc:
+                    console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
+                    continue
+                lines = text.split("\n")
+                cleaned_lines = [
+                    ""
+                    if (is_page_number_line(line) or is_byline_label_line(line))
+                    else strip_garbage_tokens(line)
+                    for line in lines
+                ]
+                changed_count = sum(1 for old, new in zip(lines, cleaned_lines) if old != new)
+                if changed_count:
+                    denoise_files += 1
+                    denoise_lines += changed_count
+                    if apply:
+                        try:
+                            txt_path.write_text("\n".join(cleaned_lines), encoding="utf-8")
+                        except OSError as exc:
+                            console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
+            console.print(
+                f"[bold]OCR-chiqindi tozalash:[/bold] {denoise_lines} qatordan chiqindi token/"
+                f"qoldiq sahifa raqami/muallif-yorlig'i olib tashlan{'di' if apply else 'adi'} "
+                f"({denoise_files} faylda). (HF fayllar ham shu bosqichga kiradi.)"
+            )
+        else:
+            console.print("[dim]4-bosqich (OCR-chiqindi tozalash) o'tkazib yuborildi (--no-denoise).[/dim]")
 
         # 5. OCR-manba imlo tuzatish (ishonchli lug'at, faqat HF-manba BO'LMAGAN fayllar)
+        if not run_spellcheck:
+            console.print("[dim]5-bosqich (imlo tuzatish) o'tkazib yuborildi (--no-spellcheck).[/dim]")
+            if not apply:
+                console.print(
+                    "\n[yellow]Bu dry-run edi — hech narsa o'zgartirilmadi. "
+                    "--apply bilan qayta ishga tushiring.[/yellow]"
+                )
+            return
         trusted = build_trusted_dictionary(output_dir)
         spell_files = 0
         spell_corrections = 0

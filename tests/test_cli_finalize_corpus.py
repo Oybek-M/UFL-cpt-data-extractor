@@ -168,6 +168,166 @@ def test_apply_strips_leftover_page_number_lines(tmp_path):
     assert "Ikkinchi bob shu yerdan davom etadi." in cleaned_text
 
 
+def test_apply_strips_page_number_lines_from_hf_sourced_files_too(tmp_path):
+    # Foydalanuvchi so'rovi: sahifa raqami va muallif-yorlig'i HF-manba fayllarda
+    # bo'lsa ham tozalanishi kerak (spellcheck bosqichidan farqli o'laroq).
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    hf_file = output_dir / "books" / "corpus-b__lat__shard-000001.txt"
+    _write(
+        hf_file,
+        "Birinchi bob boshlanadi va voqealar davom etadi.\n40\nIkkinchi bob shu yerdan davom etadi.\n",
+    )
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    cleaned_text = hf_file.read_text(encoding="utf-8")
+    assert "\n40\n" not in cleaned_text
+    assert "Birinchi bob boshlanadi va voqealar davom etadi." in cleaned_text
+
+
+def test_apply_strips_byline_label_lines(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    book_file = output_dir / "books" / "5_kitob.txt"
+    _write(
+        book_file,
+        "Mas'ul muharrir: Rustam Nabiyev\nBirinchi bob boshlanadi.\n",
+    )
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    cleaned_text = book_file.read_text(encoding="utf-8")
+    assert "Rustam Nabiyev" not in cleaned_text
+    assert "Birinchi bob boshlanadi." in cleaned_text
+
+
+def test_apply_keeps_author_name_mentioned_naturally_in_prose(tmp_path):
+    # Foydalanuvchi ko'rsatgan istisno: aniq yorliq (masalan "Muallif:") bo'lmasa,
+    # matn ichida tabiiy kelgan muallif ismi saqlanishi kerak.
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    book_file = output_dir / "books" / "5_kitob.txt"
+    original = "Uzbekiston xalq yozuvchisi Abdulla Qahhor tavalludining 100 yilligiga bag'ishlab.\n"
+    _write(book_file, original)
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    assert "Abdulla Qahhor" in book_file.read_text(encoding="utf-8")
+
+
+def test_no_dedup_flag_skips_dedup_stage(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    dup_a = output_dir / "books" / "1_a.txt"
+    dup_b = output_dir / "books" / "2_b.txt"
+    _write(dup_a, "Bir xil matn.")
+    _write(dup_b, "Bir xil matn.")
+
+    result = runner.invoke(
+        app, ["finalize-corpus", "--apply", "--no-dedup", "--config", str(config_path)]
+    )
+
+    assert result.exit_code == 0
+    assert dup_a.exists() and dup_b.exists()  # dedup ishlamagani uchun ikkalasi ham qoladi
+
+
+def test_no_pii_flag_skips_pii_stage(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    pii_file = output_dir / "web_news" / "1_a.txt"
+    # denoise ham o'chirilgan — garbage-token tozalash "@" belgisini chiqindi deb
+    # hisoblaydi, shu bois PII bosqichini izolyatsiya qilish uchun uni ham o'chiramiz.
+    _write(pii_file, "Email: a@b.com bilan bog'laning.")
+
+    result = runner.invoke(
+        app,
+        ["finalize-corpus", "--apply", "--no-pii", "--no-denoise", "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    assert "a@b.com" in pii_file.read_text(encoding="utf-8")
+
+
+def test_no_hf_rename_flag_skips_hf_rename_stage(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    hf_file = output_dir / "web_news" / "tahrirchi_uz-crawl__news__shard-000001.txt"
+    _write(hf_file, "Oddiy matn.")
+
+    result = runner.invoke(
+        app, ["finalize-corpus", "--apply", "--no-hf-rename", "--config", str(config_path)]
+    )
+
+    assert result.exit_code == 0
+    assert hf_file.exists()  # qayta nomlanmagan
+
+
+def test_no_denoise_flag_skips_denoise_stage(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    garbage_file = output_dir / "web_news" / "3_c.txt"
+    original = "Yaxshi gap bu yerda.\n• kayta nshlaga1^ K r k -^.\n"
+    _write(garbage_file, original)
+
+    result = runner.invoke(
+        app, ["finalize-corpus", "--apply", "--no-denoise", "--config", str(config_path)]
+    )
+
+    assert result.exit_code == 0
+    assert garbage_file.read_text(encoding="utf-8") == original
+
+
+def test_no_spellcheck_flag_skips_spellcheck_stage(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    _write(output_dir / "web_news" / "corpus-a__news__shard-000001.txt", "qayta ishlash kerak.\n")
+    ziyouz_file = output_dir / "web_news" / "10763_kimdir.txt"
+    original = "Bu kayta ishlash kerak edi.\n"
+    _write(ziyouz_file, original)
+
+    result = runner.invoke(
+        app, ["finalize-corpus", "--apply", "--no-spellcheck", "--config", str(config_path)]
+    )
+
+    assert result.exit_code == 0
+    assert ziyouz_file.read_text(encoding="utf-8") == original
+
+
+def test_only_stage_5_can_run_alone(tmp_path):
+    """Faqat 5-bosqich (imlo tuzatish) ishlashi kerak bo'lganda, boshqa barcha
+    bosqichlarni o'chirib qo'yish mumkinligini tekshiradi (foydalanuvchi so'rovi:
+    yangi ma'lumot qo'shilganda faqat kerakli bosqichni qayta ishga tushirish)."""
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    dup_a = output_dir / "books" / "1_a.txt"
+    dup_b = output_dir / "books" / "2_b.txt"
+    _write(dup_a, "Bir xil matn.")
+    _write(dup_b, "Bir xil matn.")
+    _write(
+        output_dir / "web_news" / "corpus-a__news__shard-000001.txt",
+        "qayta ishlash kerak. Yana qayta qildik. Qayta va qayta.\n",
+    )
+    ziyouz_file = output_dir / "web_news" / "10763_kimdir.txt"
+    _write(ziyouz_file, "Bu kayta ishlash kerak edi.\n")
+
+    result = runner.invoke(
+        app,
+        [
+            "finalize-corpus", "--apply",
+            "--no-dedup", "--no-pii", "--no-hf-rename", "--no-denoise",
+            "--config", str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert dup_a.exists() and dup_b.exists()  # dedup o'chirilgan
+    assert "qayta" in ziyouz_file.read_text(encoding="utf-8")  # faqat spellcheck ishlagan
+
+
 def test_dry_run_does_not_modify_ocr_garbage(tmp_path):
     config_path = _write_test_config(tmp_path)
     output_dir = tmp_path / "output"

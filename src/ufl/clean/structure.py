@@ -120,6 +120,25 @@ def is_page_number_line(text: str) -> bool:
     return bool(_PAGE_NUMBER_RE.match(text.strip()))
 
 
+_BYLINE_LABEL_RE = re.compile(
+    r"^(mas'ul\s+)?"
+    r"(muallif(i)?|muharrir(i)?|tuzuvchi(si)?|tahrir(chi)?(si)?|tarjimon(i)?)"
+    r"\s*:\s*\S.*$",
+    re.IGNORECASE,
+)
+
+
+def is_byline_label_line(text: str) -> bool:
+    """Qator aniq muallif/muharrir/tuzuvchi/tarjimon YORLIG'I bilan boshlanadimi
+    (masalan "Muallif: Abdulla Qahhor", "Mas'ul muharrir: Rustam Nabiyev").
+
+    Faqat ANIQ yorliq (so'ng ":" bilan) bor qatorlarni ushlaydi — shu bois
+    xavfsiz: matn ichida tabiiy tarzda kelgan muallif ismi (masalan
+    "Uzbekiston xalq yozuvchisi Abdulla Qahhor tavalludining...") bunga mos
+    kelmaydi, chunki u yerda aniq yorliq-formatidagi ":" yo'q."""
+    return bool(_BYLINE_LABEL_RE.match(text.strip()))
+
+
 def _is_toc_entry(text: str) -> bool:
     return bool(_TOC_RE.search(text))
 

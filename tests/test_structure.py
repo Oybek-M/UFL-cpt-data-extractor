@@ -1,4 +1,4 @@
-from ufl.clean.structure import clean_structure, is_page_number_line
+from ufl.clean.structure import clean_structure, is_byline_label_line, is_page_number_line
 from ufl.ingest.base import Block, Document
 
 
@@ -7,6 +7,22 @@ def test_is_page_number_line_matches_bare_and_bet_suffixed_numbers():
     assert is_page_number_line("- 12 -")
     assert is_page_number_line("45-bet")
     assert not is_page_number_line("Bul fuqaro 10 ilmi siyosatdin xabardor bo'lmasligiga.")
+
+
+def test_is_byline_label_line_matches_explicit_credit_labels():
+    assert is_byline_label_line("Muallif: Abdulla Qahhor")
+    assert is_byline_label_line("Mas'ul muharrir: Rustam Nabiyev")
+    assert is_byline_label_line("Tuzuvchi: Bahrom Irzayev")
+    assert is_byline_label_line("Tarjimon: Sirojiddin Sayyid")
+
+
+def test_is_byline_label_line_keeps_natural_mentions_in_prose():
+    # Foydalanuvchi ko'rsatgan istisno: matn ichida tabiiy kelgan muallif ismi
+    # (aniq yorliq-formati yo'q) saqlanishi kerak.
+    assert not is_byline_label_line(
+        "Uzbekiston xalq yozuvchnsi Abdulla Qahhor tavalludining 100 yilligiga bag'ishlab."
+    )
+    assert not is_byline_label_line("Mashhur turk adibi Aziz Nesinning nomini butun jahon biladi.")
 
 
 def test_removes_repeated_running_header_and_page_numbers():
