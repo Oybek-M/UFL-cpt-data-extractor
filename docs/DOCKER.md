@@ -447,9 +447,10 @@ o'tkazib yuboriladi — `src/ufl/ziyouz/category_map.py`ga qo'shish mumkin.
 ## 10. Korpusni yakunlash (finalize-corpus)
 
 Yig'ilgan korpusni (`UFL-Datas`) jamoaning umumiy training bazasiga topshirishdan oldin
-ishga tushiriladi. Uch bosqich: global (korpus-bo'ylab) dedup, PII (email/telefon)
-tozalash, HF dataset manbasini fayl nomidan yashirish. Dizayn:
-[2026-07-18-finalize-corpus-design.md](superpowers/specs/2026-07-18-finalize-corpus-design.md).
+ishga tushiriladi. To'rt bosqich: global (korpus-bo'ylab) dedup, PII (email/telefon)
+tozalash, HF dataset manbasini fayl nomidan yashirish, OCR-chiqindi tokenlarni tozalash.
+Dizayn: [2026-07-18-finalize-corpus-design.md](superpowers/specs/2026-07-18-finalize-corpus-design.md),
+[2026-07-19-ocr-garbage-token-scrub-design.md](superpowers/specs/2026-07-19-ocr-garbage-token-scrub-design.md).
 
 ### 10.1 Ishlatish
 
@@ -467,9 +468,17 @@ docker compose run --rm ufl ufl finalize-corpus --apply
 
 ### 10.2 Bosqichlar va xavfsizlik
 
-Bosqich tartibi qat'iy: **dedup → PII → HF nomini yashirish**. Rename doim oxirida
-ishlaydi, chunki dedup va PII bosqichlari HF fayllarni asl (dataset_slug asosidagi)
-nomi orqali aniqlaydi.
+Bosqich tartibi qat'iy: **dedup → PII → HF nomini yashirish → OCR-chiqindi tozalash**.
+Rename dedup/PII'dan keyin ishlaydi, chunki ular HF fayllarni asl (dataset_slug asosidagi)
+nomi orqali aniqlaydi. OCR-chiqindi tozalash fayl nomiga bog'liq emas (faqat kontentga
+ishlaydi), shuning uchun oxirida turadi.
+
+**OCR-chiqindi tozalash** (`strip_garbage_tokens`) — ziyouz/ziyonet'dan OCR orqali olingan
+fayllarda uchraydigan qator ichidagi alohida chiqindi tokenlarni (g'ayrioddiy ramz,
+izolyatsiyalangan yakka harf, raqam-harf yopishish) olib tashlaydi, butun qatorni/blokni
+tashlamasdan. **Bilingan cheklov**: "so'zga o'xshab qolgan, lekin noto'g'ri harfli"
+chiqindi (masalan `ertaklashvj`, `xapk`) bu usul bilan tutilmaydi — lug'at yoki til
+modeli talab qiladi, hozircha qamrovdan tashqarida.
 
 Dublikat fayllar **o'chirilmaydi** — `data/rejected/duplicates/{category}/`ga
 ko'chiriladi (repo ichida, gitignored, kerak bo'lsa qaytarib olish mumkin).
