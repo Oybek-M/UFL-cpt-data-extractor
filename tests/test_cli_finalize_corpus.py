@@ -150,6 +150,24 @@ def test_apply_strips_ocr_garbage_tokens(tmp_path):
     assert "Yaxshi gap bu yerda." in cleaned_text
 
 
+def test_apply_strips_leftover_page_number_lines(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    book_file = output_dir / "books" / "5_kitob.txt"
+    _write(
+        book_file,
+        "Birinchi bob boshlanadi va voqealar davom etadi.\n40\nIkkinchi bob shu yerdan davom etadi.\n",
+    )
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    cleaned_text = book_file.read_text(encoding="utf-8")
+    assert "\n40\n" not in cleaned_text
+    assert "Birinchi bob boshlanadi va voqealar davom etadi." in cleaned_text
+    assert "Ikkinchi bob shu yerdan davom etadi." in cleaned_text
+
+
 def test_dry_run_does_not_modify_ocr_garbage(tmp_path):
     config_path = _write_test_config(tmp_path)
     output_dir = tmp_path / "output"

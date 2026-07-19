@@ -51,7 +51,7 @@ def clean_structure(
         text = block.text.strip()
         normalized = _normalize_for_repeat_check(text)
 
-        if _is_page_number(text):
+        if is_page_number_line(text):
             dropped.append((block, "sahifa_raqami"))
             continue
         if normalized in repeated_texts:
@@ -111,8 +111,13 @@ def find_ambiguous_kept_blocks(
     return ambiguous
 
 
-def _is_page_number(text: str) -> bool:
-    return bool(_PAGE_NUMBER_RE.match(text))
+def is_page_number_line(text: str) -> bool:
+    """Butun qator faqat sahifa raqamidan iboratmi (ixtiyoriy defis/"bet" bilan).
+
+    Ingest-vaqtidagi `clean_structure` bilan bir qatorda, finalize-corpus
+    retroaktiv tozalashda ham ishlatiladi (kitob fayllarida asl ingest'dan
+    qolib ketgan alohida qatorli sahifa raqamlari uchun)."""
+    return bool(_PAGE_NUMBER_RE.match(text.strip()))
 
 
 def _is_toc_entry(text: str) -> bool:

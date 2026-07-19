@@ -16,6 +16,7 @@ from ufl.cleanup import cleanup_logs
 from ufl.clean.dedup import DeduplicationStore
 from ufl.clean.language import load_fasttext_predictor
 from ufl.clean.quality import strip_garbage_tokens
+from ufl.clean.structure import is_page_number_line
 from ufl.config import Config
 from ufl.crawl.collector import Collector
 from ufl.crawl.minimax import InMemoryMetaState, MiniMaxClient
@@ -782,7 +783,9 @@ def finalize_corpus(
                 console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
                 continue
             lines = text.split("\n")
-            cleaned_lines = [strip_garbage_tokens(line) for line in lines]
+            cleaned_lines = [
+                "" if is_page_number_line(line) else strip_garbage_tokens(line) for line in lines
+            ]
             changed_count = sum(1 for old, new in zip(lines, cleaned_lines) if old != new)
             if changed_count:
                 denoise_files += 1
@@ -793,8 +796,8 @@ def finalize_corpus(
                     except OSError as exc:
                         console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
         console.print(
-            f"[bold]OCR-chiqindi tozalash:[/bold] {denoise_lines} qatordan chiqindi token "
-            f"olib tashlan{'di' if apply else 'adi'} ({denoise_files} faylda)."
+            f"[bold]OCR-chiqindi tozalash:[/bold] {denoise_lines} qatordan chiqindi token/"
+            f"qoldiq sahifa raqami olib tashlan{'di' if apply else 'adi'} ({denoise_files} faylda)."
         )
 
         # 5. OCR-manba imlo tuzatish (ishonchli lug'at, faqat HF-manba BO'LMAGAN fayllar)

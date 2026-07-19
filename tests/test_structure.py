@@ -1,5 +1,12 @@
-from ufl.clean.structure import clean_structure
+from ufl.clean.structure import clean_structure, is_page_number_line
 from ufl.ingest.base import Block, Document
+
+
+def test_is_page_number_line_matches_bare_and_bet_suffixed_numbers():
+    assert is_page_number_line("40")
+    assert is_page_number_line("- 12 -")
+    assert is_page_number_line("45-bet")
+    assert not is_page_number_line("Bul fuqaro 10 ilmi siyosatdin xabardor bo'lmasligiga.")
 
 
 def test_removes_repeated_running_header_and_page_numbers():
