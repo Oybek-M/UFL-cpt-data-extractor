@@ -3,7 +3,13 @@
 
 from pathlib import Path
 
-from ufl.finalize.spellcheck import build_trusted_dictionary, correct_line, find_correction
+from ufl.finalize.spellcheck import (
+    apply_known_corrections,
+    build_trusted_dictionary,
+    correct_line,
+    find_correction,
+    query_minimax_corrections,
+)
 
 
 def _write(path: Path, text: str) -> None:
@@ -84,3 +90,87 @@ def test_correct_line_calls_on_unresolved_for_unfixable_words():
 def test_correct_line_leaves_blank_line_unchanged():
     assert correct_line("", {"kitob"}) == ""
     assert correct_line("   ", {"kitob"}) == "   "
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, body: dict):
+        self.status_code = status_code
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def _minimax_body(corrections: dict) -> dict:
+    import json
+
+    return {"choices": [{"message": {"content": json.dumps({"corrections": corrections})}}]}
+
+
+def test_query_minimax_corrections_returns_empty_without_api_key():
+    corrections, calls = query_minimax_corrections(["gubla"], api_key="")
+    assert corrections == {}
+    assert calls == 0
+
+
+def test_query_minimax_corrections_returns_empty_for_empty_word_list():
+    corrections, calls = query_minimax_corrections([], api_key="fake-key")
+    assert corrections == {}
+    assert calls == 0
+
+
+def test_query_minimax_corrections_parses_response():
+    def fake_post(url, headers, json_body, timeout):
+        return _FakeResponse(200, _minimax_body({"gubla": "gulla", "xyzabc": None}))
+
+    corrections, calls = query_minimax_corrections(
+        ["gubla", "xyzabc"], api_key="fake-key", post=fake_post
+    )
+    assert corrections == {"gubla": "gulla"}
+    assert calls == 1
+
+
+def test_query_minimax_corrections_batches_large_word_lists():
+    call_log = []
+
+    def fake_post(url, headers, json_body, timeout):
+        call_log.append(json_body)
+        return _FakeResponse(200, _minimax_body({}))
+
+    words = [f"word{i}" for i in range(5)]
+    _, calls = query_minimax_corrections(words, api_key="fake-key", post=fake_post, batch_size=2)
+
+    assert calls == 3  # 5 so'z, batch_size=2 -> 3 so'rov (2+2+1)
+
+
+def test_query_minimax_corrections_returns_empty_on_network_error():
+    def fake_post(url, headers, json_body, timeout):
+        raise ConnectionError("network down")
+
+    corrections, calls = query_minimax_corrections(["gubla"], api_key="fake-key", post=fake_post)
+    assert corrections == {}
+    assert calls == 1  # urinish qilindi, lekin xato bo'ldi
+
+
+def test_query_minimax_corrections_returns_empty_on_bad_status():
+    def fake_post(url, headers, json_body, timeout):
+        return _FakeResponse(401, {})
+
+    corrections, calls = query_minimax_corrections(["gubla"], api_key="fake-key", post=fake_post)
+    assert corrections == {}
+    assert calls == 1
+
+
+def test_apply_known_corrections_replaces_matching_words():
+    corrections = {"gubla": "gulla"}
+    calls = []
+    result = apply_known_corrections(
+        "Bu gubla, chiroyli.", corrections, on_correction=lambda old, new: calls.append((old, new))
+    )
+    assert result == "Bu Gulla, chiroyli."
+    assert calls == [("gubla,", "Gulla,")]
+
+
+def test_apply_known_corrections_leaves_unmatched_words_unchanged():
+    result = apply_known_corrections("Bu kitob edi.", {"gubla": "gulla"})
+    assert result == "Bu kitob edi."
