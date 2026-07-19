@@ -54,16 +54,11 @@ def test_find_correction_returns_none_when_no_candidate_found():
 
 
 def test_find_correction_returns_none_when_ambiguous():
-    # "kaqta" -> ("q","k") almashtirilsa "kaqta"->"kaqta" (o'zgarmaydi, chunki "q"
-    # so'zda bor, "k"ga almashtirilsa "kaqta"->"kaqta"): ikkita mustaqil trusted so'z
-    # topiladigan sun'iy holat quramiz.
-    trusted = {"kaqta", "qaqta"}
-    # "kakta" so'zidan: (q,k) juftligi bo'yicha "k"->"q" almashtirilsa har ikki "k"
-    # birdek almashadi -> "qaqta" (trusted'da bor). Alohida boshqa juftlik orqali
-    # "kaqta" ham topilib qolishi mumkin emas shu misolda, shuning uchun oddiyroq
-    # sun'iy holat: ikkita turli juftlik ikkita turli trusted so'zga olib kelsin.
-    trusted_ambiguous = {"gakta", "haqta"}
-    assert find_correction("gaxta", trusted_ambiguous) is None
+    # "kaha" ikkita mustaqil chalkashlik juftligi orqali ikkita turli ishonchli
+    # so'zga olib keladi: q/k juftligi "kaha"->"qaha", h/x juftligi "kaha"->"kaxa".
+    # Ikkalasi ham trusted'da bo'lgani uchun (2 nomzod) — aniqmas, tuzatilmaydi.
+    trusted = {"qaha", "kaxa"}
+    assert find_correction("kaha", trusted) is None
 
 
 def test_correct_line_applies_correction_and_calls_callback():
