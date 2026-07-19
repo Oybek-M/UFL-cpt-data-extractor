@@ -99,6 +99,11 @@ def test_strip_garbage_tokens_removes_digit_letter_fusion_without_hyphen():
     assert strip_garbage_tokens(line) == "Bu xato edi."
 
 
+def test_strip_garbage_tokens_keeps_word_hyphen_digit_references():
+    line = "Bu nashr-0 va band-3 haqida."
+    assert strip_garbage_tokens(line) == "Bu nashr-0 va band-3 haqida."
+
+
 def test_strip_garbage_tokens_keeps_standalone_numbers():
     line = "1. Birinchi band va 2. ikkinchi band."
     assert strip_garbage_tokens(line) == line

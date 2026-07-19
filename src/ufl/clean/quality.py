@@ -65,13 +65,13 @@ def assess(
     return QualityResult(True, None)
 
 
-_DIGIT_SUFFIX_WORDS = {
-    "bet", "yil", "son", "hafta", "kun", "soat", "minut", "sekund",
-    "yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul",
-    "avgust", "sentabr", "oktabr", "noyabr", "dekabr",
-}
 _ALLOWED_EXTRA_CHARS = set("'-.,!?:;()\"«»–—…")
-_DIGIT_WORD_RE = re.compile(r"^(\d+)-([^\W\d_]+)$", re.UNICODE)
+# Defis toza raqam-guruhini toza harf-guruhidan ajratsa (ikkala tartibda ham:
+# "5-bet", "1991-yil" yoki "nashr-0", "band-3"), bu OCR-chiqindi emas — real
+# chiqindida (masalan "nshlaga1^") raqam va harf hech qanday defissiz to'g'ridan
+# to'g'ri yopishgan bo'ladi.
+_DIGIT_FIRST_RE = re.compile(r"^\d+-[^\W\d_]+[.,!?:;]*$", re.UNICODE)
+_WORD_FIRST_RE = re.compile(r"^[^\W\d_]+-\d+[.,!?:;]*$", re.UNICODE)
 
 
 def _is_garbage_token(token: str) -> bool:
@@ -82,8 +82,7 @@ def _is_garbage_token(token: str) -> bool:
     has_digit = any(ch.isdigit() for ch in token)
     has_letter = any(ch.isalpha() for ch in token)
     if has_digit and has_letter:
-        match = _DIGIT_WORD_RE.match(token)
-        if match and match.group(2).lower() in _DIGIT_SUFFIX_WORDS:
+        if _DIGIT_FIRST_RE.match(token) or _WORD_FIRST_RE.match(token):
             return False
         return True
     return False

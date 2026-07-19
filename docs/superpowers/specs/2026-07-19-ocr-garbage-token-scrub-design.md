@@ -76,15 +76,19 @@ mos kelsa, **butunlay olib tashlanadi**:
    `r`, `k`) — olib tashlanadi. Bu **ro'yxatga asoslanmagan, blanket qoida**: zamonaviy o'zbek
    yozma tilida yakka harf mustaqil so'z sifatida deyarli hech qachon uchramaydi.
 3. **Raqam+harf "yopishgan"** — token tarkibida ham raqam, ham harf bo'lib, ular orasida defis
-   yo'q bo'lsa (masalan `nshlaga1^`, `5abc`) — olib tashlanadi. **Istisno**: agar token
-   `{raqam}-{so'z}` shaklida bo'lsa (masalan `5-bet`, `1991-yil`) va `{so'z}` qismi
-   `DIGIT_SUFFIX_WORDS` yopiq ro'yxatida bo'lsa — saqlanadi (bu haqiqiy sana/sahifa/raqam
-   ko'rsatkichlari uchun standart o'zbekcha yozuv shakli).
-   - `DIGIT_SUFFIX_WORDS = {"bet", "yil", "son", "hafta", "kun", "soat", "minut", "sekund",
-     "mart", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr", "yanvar",
-     "fevral", "aprel"}` — **eslatma**: bu ro'yxat ham loyiha rahbari (ona tilida so'zlovchi)
-     tomonidan implementatsiyadan oldin tasdiqlanishi/to'g'irlanishi kerak (spec review
-     bosqichida).
+   yo'q bo'lsa (masalan `nshlaga1^`, `5abc`) — olib tashlanadi. **Istisno**: agar defis toza
+   raqam-guruhini toza harf-guruhidan ajratsa — **ikkala tartibda ham** (`{raqam}-{so'z}`,
+   masalan `5-bet`, `1991-yil`, YOKI `{so'z}-{raqam}`, masalan `nashr-0`, `band-3`) — saqlanadi.
+   - **Implementatsiya paytida topilgan tuzatish**: dastlabki loyihada faqat `{raqam}-{so'z}`
+     tartibi va yopiq `DIGIT_SUFFIX_WORDS` so'z-ro'yxati bilan cheklangan edi — bu haqiqiy
+     regressiyaga olib keldi (`tests/test_cli_fetch_hf.py`dagi mavjud testlar `nashr-0` kabi
+     so'z-defis-raqam identifikatorlarini chiqindi deb noto'g'ri olib tashlab, budjet/limit
+     hisoblarini buzdi — to'liq test suite orqali aniqlandi). Tuzatish: yopiq so'z-ro'yxati
+     talabi butunlay olib tashlandi, buning o'rniga faqat **struktura** tekshiriladi (defis
+     toza raqam va toza harf guruhlarini ajratadimi, tartibidan qat'iy nazar) — bu haqiqiy OCR
+     chiqindisini (defissiz to'g'ridan-to'g'ri yopishgan, masalan `nshlaga1^`) hamon to'g'ri
+     tutadi, lekin har qanday legitim so'z-raqam/raqam-so'z havolasini keraksiz cheklamasdan
+     saqlaydi.
 
 **Rad etilgan qoida (aniq ko'rsatilgan sabab bilan):** "2-3 harfli token yopiq ro'yxatda yo'q
 bo'lsa — chiqindi" — bu qoida ustidan brainstorming paytida to'xtatildi: xato-tashlash xavfi
