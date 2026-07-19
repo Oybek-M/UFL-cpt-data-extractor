@@ -7,6 +7,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+import ufl.cli as cli_module
 from ufl.cli import app
 from ufl.store.db import BookRecord, Store
 
@@ -160,3 +161,63 @@ def test_dry_run_does_not_modify_ocr_garbage(tmp_path):
 
     assert result.exit_code == 0
     assert garbage_file.read_text(encoding="utf-8") == original
+
+
+def test_apply_corrects_known_ocr_confusion(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    _write(output_dir / "web_news" / "corpus-a__news__shard-000001.txt", "qayta ishlash kerak.\n")
+    ziyouz_file = output_dir / "web_news" / "10763_kimdir.txt"
+    _write(ziyouz_file, "Bu kayta ishlash kerak edi.\n")
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    corrected = ziyouz_file.read_text(encoding="utf-8")
+    assert "qayta" in corrected
+    assert "kayta" not in corrected
+    assert "Tuzatildi" in result.output
+
+
+def test_dry_run_does_not_modify_spelling(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    _write(output_dir / "web_news" / "corpus-a__news__shard-000001.txt", "qayta ishlash kerak.\n")
+    ziyouz_file = output_dir / "web_news" / "10763_kimdir.txt"
+    original = "Bu kayta ishlash kerak edi.\n"
+    _write(ziyouz_file, original)
+
+    result = runner.invoke(app, ["finalize-corpus", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    assert ziyouz_file.read_text(encoding="utf-8") == original
+
+
+def test_apply_does_not_touch_hf_sourced_files(tmp_path):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    hf_file = output_dir / "web_news" / "corpus-a__news__shard-000001.txt"
+    original = "Bu kayta ishlanmagan HF matni (o'zgarishsiz qolishi kerak).\n"
+    _write(hf_file, original)
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    assert hf_file.read_text(encoding="utf-8") == original  # HF fayllarga tegilmaydi
+
+
+def test_apply_without_minimax_flag_does_not_call_minimax(tmp_path, monkeypatch):
+    config_path = _write_test_config(tmp_path)
+    output_dir = tmp_path / "output"
+    _write(output_dir / "web_news" / "corpus-a__news__shard-000001.txt", "kitob juda yaxshi.\n")
+    _write(output_dir / "web_news" / "10763_kimdir.txt", "Bu nomavjudsoz.\n")
+
+    called = []
+    monkeypatch.setattr(
+        cli_module, "query_minimax_corrections", lambda *a, **kw: called.append(1) or ({}, 0)
+    )
+
+    result = runner.invoke(app, ["finalize-corpus", "--apply", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    assert called == []  # --use-minimax berilmagani uchun chaqirilmagan

@@ -24,7 +24,13 @@ from ufl.crawl.urls import domain_folder, prepare_url
 from ufl.crawl.web_client import RobotsPolicy, WebClient
 from ufl.crawl.writer import BundledWriter
 from ufl.finalize.dedup import find_duplicate_groups, quarantine_duplicates
-from ufl.finalize.hf_rename import match_hf_shard_filename, renamed_filename
+from ufl.finalize.hf_rename import is_hf_sourced_filename, match_hf_shard_filename, renamed_filename
+from ufl.finalize.spellcheck import (
+    apply_known_corrections,
+    build_trusted_dictionary,
+    correct_line,
+    query_minimax_corrections,
+)
 from ufl.finalize.pii import scrub_pii
 from ufl.hf_pipeline import process_hf_shard
 from ufl.ingest.hf_dataset import SHARD_SIZE, dataset_slug, iter_shards
@@ -690,11 +696,15 @@ def finalize_corpus(
     apply: bool = typer.Option(
         False, "--apply", help="Haqiqiy o'zgarish qilish (standart: faqat hisobot, dry-run)"
     ),
+    use_minimax: bool = typer.Option(
+        False, "--use-minimax",
+        help="Qoidaga asoslangan usul hal qila olmagan so'zlar uchun MiniMax'dan ham foydalanish (standart: o'chiq, xarajat uchun)",
+    ),
     config_path: Path = typer.Option(Path("config/ufl.toml"), "--config", help="Config fayl yo'li"),
 ) -> None:
     """Yig'ilgan korpusni jamoaga topshirishdan oldin tayyorlaydi: global dedup,
     PII tozalash, HF dataset manbasini fayl nomidan yashirish, OCR-chiqindi
-    tokenlarni tozalash.
+    tokenlarni tozalash, OCR-manba imlo xatolarini tuzatish.
 
     Bosqich tartibi muhim: dedup va PII HF fayllarni asl (dataset_slug asosidagi)
     nomi bilan aniqlaydi, shuning uchun rename doim OXIRIDA (3-bosqich) ishlaydi.
@@ -786,6 +796,107 @@ def finalize_corpus(
             f"[bold]OCR-chiqindi tozalash:[/bold] {denoise_lines} qatordan chiqindi token "
             f"olib tashlan{'di' if apply else 'adi'} ({denoise_files} faylda)."
         )
+
+        # 5. OCR-manba imlo tuzatish (ishonchli lug'at, faqat HF-manba BO'LMAGAN fayllar)
+        trusted = build_trusted_dictionary(output_dir)
+        spell_files = 0
+        spell_corrections = 0
+        unresolved_words: set[str] = set()
+
+        def _log_spell_correction(original: str, corrected: str, txt_path: Path, line_number: int) -> None:
+            console.print(
+                f"[bold]Tuzatildi:[/bold] {original} -> {corrected} "
+                f"(fayl: {txt_path}, qator: {line_number})"
+            )
+
+        for txt_path in output_dir.glob("*/*.txt"):
+            if is_hf_sourced_filename(txt_path.name):
+                continue
+            try:
+                text = txt_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
+                continue
+            lines = text.split("\n")
+            new_lines: list[str] = []
+            file_had_correction = False
+            for line_number, line in enumerate(lines, start=1):
+                correction_count_before = spell_corrections
+
+                def _on_correction(original: str, corrected: str, _path=txt_path, _line_number=line_number) -> None:
+                    nonlocal spell_corrections
+                    spell_corrections += 1
+                    _log_spell_correction(original, corrected, _path, _line_number)
+
+                new_line = correct_line(
+                    line,
+                    trusted,
+                    on_correction=_on_correction,
+                    on_unresolved=unresolved_words.add,
+                )
+                if spell_corrections != correction_count_before:
+                    file_had_correction = True
+                new_lines.append(new_line)
+            if file_had_correction:
+                spell_files += 1
+                if apply:
+                    try:
+                        txt_path.write_text("\n".join(new_lines), encoding="utf-8")
+                    except OSError as exc:
+                        console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
+
+        minimax_calls = 0
+        if use_minimax and unresolved_words:
+            api_key = os.environ.get("MINIMAX_API_KEY", "").strip()
+            minimax_corrections, minimax_calls = query_minimax_corrections(
+                sorted(unresolved_words), api_key=api_key
+            )
+            if minimax_corrections:
+                for txt_path in output_dir.glob("*/*.txt"):
+                    if is_hf_sourced_filename(txt_path.name):
+                        continue
+                    try:
+                        text = txt_path.read_text(encoding="utf-8")
+                    except OSError as exc:
+                        console.print(f"[red]O'qib bo'lmadi:[/red] {txt_path} — {exc}")
+                        continue
+                    lines = text.split("\n")
+                    new_lines = []
+                    file_had_correction = False
+                    for line_number, line in enumerate(lines, start=1):
+                        correction_count_before = spell_corrections
+
+                        def _on_minimax_correction(
+                            original: str, corrected: str, _path=txt_path, _line_number=line_number
+                        ) -> None:
+                            nonlocal spell_corrections
+                            spell_corrections += 1
+                            console.print(
+                                f"[bold]Tuzatildi (MiniMax):[/bold] {original} -> {corrected} "
+                                f"(fayl: {_path}, qator: {_line_number})"
+                            )
+
+                        new_line = apply_known_corrections(
+                            line, minimax_corrections, on_correction=_on_minimax_correction
+                        )
+                        if spell_corrections != correction_count_before:
+                            file_had_correction = True
+                        new_lines.append(new_line)
+                    if file_had_correction:
+                        spell_files += 1
+                        if apply:
+                            try:
+                                txt_path.write_text("\n".join(new_lines), encoding="utf-8")
+                            except OSError as exc:
+                                console.print(f"[red]Yozib bo'lmadi:[/red] {txt_path} — {exc}")
+
+        console.print(
+            f"[bold]Imlo tuzatish:[/bold] {spell_corrections} ta so'z tuzatil"
+            f"{'di' if apply else 'adi'} ({spell_files} faylda). "
+            f"Qoldiq (hal qilinmagan) noyob so'z: {len(unresolved_words)}."
+        )
+        if use_minimax:
+            console.print(f"[bold]MiniMax so'rovlari:[/bold] {minimax_calls} ta.")
 
     if not apply:
         console.print(
