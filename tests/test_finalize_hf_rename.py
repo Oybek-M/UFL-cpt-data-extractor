@@ -3,6 +3,7 @@
 shard raqami saqlanib qoladi."""
 
 from ufl.finalize.hf_rename import (
+    is_hf_sourced_filename,
     match_hf_shard_filename,
     renamed_filename,
     source_path_for_filename,
@@ -65,3 +66,21 @@ def test_renamed_filename_unknown_dataset_returns_none():
 
 def test_renamed_filename_non_shard_returns_none():
     assert renamed_filename("10763_hamza-hakimzoda-niyoziy.txt") is None
+
+
+def test_is_hf_sourced_filename_original_naming():
+    assert is_hf_sourced_filename("tahrirchi_uz-crawl__news__shard-000001.txt") is True
+
+
+def test_is_hf_sourced_filename_renamed_alias():
+    assert is_hf_sourced_filename("corpus-a__news__shard-000001.txt") is True
+    assert is_hf_sourced_filename("corpus-b__lat__shard-000001.txt") is True
+    assert is_hf_sourced_filename("corpus-c__train__shard-000001.txt") is True
+
+
+def test_is_hf_sourced_filename_ziyouz_style_returns_false():
+    assert is_hf_sourced_filename("10763_hamza-hakimzoda-niyoziy.txt") is False
+
+
+def test_is_hf_sourced_filename_unrecognized_slug_returns_false():
+    assert is_hf_sourced_filename("boshqa_dataset__train__shard-000001.txt") is False

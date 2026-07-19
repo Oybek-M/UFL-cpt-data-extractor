@@ -72,3 +72,14 @@ def renamed_filename(filename: str) -> str | None:
         return None
     alias = DATASET_ALIAS[match.dataset_id]
     return f"{alias}__{match.split}__shard-{match.shard}.txt"
+
+
+def is_hf_sourced_filename(filename: str) -> bool:
+    """Fayl HF dataset'dan kelib chiqqanmi — hali qayta nomlanmagan (masalan
+    tahrirchi_uz-crawl__...) yoki qayta nomlangan (corpus-a__...) holatlarning
+    ikkalasini ham tekshiradi."""
+    match = _SHARD_FILENAME_RE.match(filename)
+    if match is None:
+        return False
+    slug = match.group("slug")
+    return slug in _SLUG_TO_DATASET_ID or slug in DATASET_ALIAS.values()
