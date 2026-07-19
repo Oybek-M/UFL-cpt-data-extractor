@@ -63,3 +63,37 @@ def assess(
         return QualityResult(False, "ortiqcha_takror")
 
     return QualityResult(True, None)
+
+
+_DIGIT_SUFFIX_WORDS = {
+    "bet", "yil", "son", "hafta", "kun", "soat", "minut", "sekund",
+    "yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul",
+    "avgust", "sentabr", "oktabr", "noyabr", "dekabr",
+}
+_ALLOWED_EXTRA_CHARS = set("'-.,!?:;()\"«»–—…")
+_DIGIT_WORD_RE = re.compile(r"^(\d+)-([^\W\d_]+)$", re.UNICODE)
+
+
+def _is_garbage_token(token: str) -> bool:
+    if any(not (ch.isalpha() or ch.isdigit() or ch in _ALLOWED_EXTRA_CHARS) for ch in token):
+        return True
+    if len(token) == 1 and token.isalpha():
+        return True
+    has_digit = any(ch.isdigit() for ch in token)
+    has_letter = any(ch.isalpha() for ch in token)
+    if has_digit and has_letter:
+        match = _DIGIT_WORD_RE.match(token)
+        if match and match.group(2).lower() in _DIGIT_SUFFIX_WORDS:
+            return False
+        return True
+    return False
+
+
+def strip_garbage_tokens(line: str) -> str:
+    """OCR-chiqindi tokenlarni (g'ayrioddiy ramz, izolyatsiyalangan yakka harf,
+    raqam-harf yopishish) qatordan olib tashlaydi, qolganlarini bo'shliq bilan
+    qayta birlashtiradi. Bo'sh/faqat-bo'shliq qator o'zgarishsiz qaytariladi."""
+    if not line.strip():
+        return line
+    kept = [token for token in line.split() if not _is_garbage_token(token)]
+    return " ".join(kept)
