@@ -26,6 +26,7 @@ access_token*
 !/data/output/.gitkeep
 !/data/rejected/.gitkeep
 !/data/reports/.gitkeep
+/scratchpad_backup_before_revert/
 
 # === Models (og'ir fayllar, tokenizer cache) ===
 /models/**
