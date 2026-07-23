@@ -48,6 +48,7 @@ __pycache__/
 build/
 dist/
 .venv/
+.venv_host/
 venv/
 .pytest_cache/
 .mypy_cache/

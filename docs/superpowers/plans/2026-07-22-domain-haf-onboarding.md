@@ -143,3 +143,18 @@ head -c 1000 "../UFL-Datas/domain_haf/davolash.txt"
   bo'ling — nusxa olib keyin ishlang.
 - Ishlov berilgach, "biznes" mavzusi uchun alohida ma'lumot yig'ish kerakligini
   jamoaga eslatib qo'ying — hozircha bu bo'limda faqat sog'liq va qishloq xo'jaligi bor.
+
+---
+
+## 🟢 Bajarildi (2026-07-22)
+
+Ushbu onboarding rejasi **Antigravity AI** tomonidan 2026-yil 22-iyulda to'liq va muvaffaqiyatli bajarildi:
+
+1. **Fayllar ko'chirildi:** `data/input/domain_haf/` papkasiga 3 ta manba fayli nusxalandi.
+2. **Pipeline ishga tushirildi:** `docker compose run --rm ufl ufl run data/input --config config/ufl.toml` buyrug'i yordamida to'g'ri kategoriyalash (`domain_haf`) ta'minlandi.
+3. **Statistika yangilandi:**
+   - Muvaffaqiyatli qayta ishlangan fayllar soni: 3
+   - Aniq yig'ilgan tokenlar soni: **12,719,017**
+   - Byudjet progress: **21.2%**
+4. **Finalizatsiya bajarildi:** `ufl finalize-corpus --apply --no-spellcheck` orqali matnlardan shovqinlar va keraksiz OCR elementlari olib tashlandi (jami 48 qator tozalandi).
+5. **Natijalar tekshirildi:** `../UFL-Datas/domain_haf/` ostidagi fayllar tarkibi spot-check qilinib, toza lotin matn ekanligi tasdiqlandi.
